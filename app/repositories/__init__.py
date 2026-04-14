@@ -1,2 +1,0 @@
-"""Repository abstractions and implementations."""
-
