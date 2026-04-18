@@ -5,7 +5,12 @@ python-dotenv==1.0.1
 pydantic-settings==2.2.1
 aiofiles==23.2.1
 langchain==0.1.20
+langchain-community==0.0.38
+langchain-core==0.1.52
+langchain-cohere==0.1.5
+langchain-qdrant==0.1.4
 PyMuPDF==1.24.3
+pypdf==4.2.0
 motor==3.4.0
 pydantic-mongo==2.3.0
 openai==1.75.0
