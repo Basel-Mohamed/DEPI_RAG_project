@@ -7,3 +7,4 @@ pydantic-settings
 docling
 pytest
 fastembed
+qdrant_client
