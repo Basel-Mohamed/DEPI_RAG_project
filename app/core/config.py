@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -10,8 +9,11 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
 
-    class Config:
-        env_file = ".env"
+    # Preprocessing image settings
+    IMAGE_SCALE: float = 2.0
+    IMAGE_FORMAT: str = "PNG"
 
-def settings():
-    return Settings()
+    # Embedding settings
+    EMBEDDING_MODEL: str = "BAAI/bge-m3"
+
+settings = Settings()
