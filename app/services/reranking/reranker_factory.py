@@ -3,9 +3,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from app.services.reranker.base_reranker import BaseRerankerService
-from app.services.reranker.providers.azure_reranker import AzureCohereRerankerService
-from app.services.reranker.providers.cohere_reranker import CohereRerankerService
+from app.services.reranking.base_reranker import BaseRerankerService
+from app.services.reranking.providers.azure_reranker import AzureCohereRerankerService
+from app.services.reranking.providers.cohere_reranker import CohereRerankerService
 
 
 class RerankerType(Enum):
