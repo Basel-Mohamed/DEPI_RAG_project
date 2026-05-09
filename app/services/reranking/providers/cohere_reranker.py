@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.reranker.base_reranker import BaseRerankerService, RerankerServiceError
+from app.services.reranking.base_reranker import BaseRerankerService, RerankerServiceError
 
 
 class CohereRerankerService(BaseRerankerService):
