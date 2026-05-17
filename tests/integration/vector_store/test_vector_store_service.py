@@ -381,3 +381,96 @@ def test_search_default_mode_from_settings(populated_qdrant):
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])
+
+
+# ------------------------------------------------------------------
+# Metrics instrumentation
+# ------------------------------------------------------------------
+
+def test_upsert_records_qdrant_latency(qdrant_service, embedded_chunks):
+    """QDRANT_LATENCY histogram should have observations after upsert."""
+    from app.core.metrics import QDRANT_LATENCY
+
+    before = QDRANT_LATENCY._sum.get()
+    qdrant_service.upsert(embedded_chunks)
+    after = QDRANT_LATENCY._sum.get()
+
+    assert after > before
+
+
+def test_upsert_increments_chunks_ingested(qdrant_service, embedded_chunks):
+    """CHUNKS_INGESTED counter should increment by the number of chunks upserted."""
+    from app.core.metrics import CHUNKS_INGESTED
+
+    before = CHUNKS_INGESTED._value.get()
+    qdrant_service.upsert(embedded_chunks)
+    after = CHUNKS_INGESTED._value.get()
+
+    assert after == before + len(embedded_chunks)
+
+
+def test_upsert_empty_does_not_increment_chunks(qdrant_service):
+    """CHUNKS_INGESTED should not change when upserting empty list."""
+    from app.core.metrics import CHUNKS_INGESTED
+
+    before = CHUNKS_INGESTED._value.get()
+    qdrant_service.upsert([])
+    after = CHUNKS_INGESTED._value.get()
+
+    assert after == before
+
+
+def test_dense_search_records_qdrant_latency(populated_qdrant):
+    """QDRANT_LATENCY should increase after a dense search."""
+    from app.core.metrics import QDRANT_LATENCY
+
+    before = QDRANT_LATENCY._sum.get()
+    populated_qdrant.search("marketing", mode=SearchMode.DENSE, top_k=2)
+    after = QDRANT_LATENCY._sum.get()
+
+    assert after > before
+
+
+def test_sparse_search_records_qdrant_latency(populated_qdrant):
+    """QDRANT_LATENCY should increase after a sparse search."""
+    from app.core.metrics import QDRANT_LATENCY
+
+    before = QDRANT_LATENCY._sum.get()
+    populated_qdrant.search("SEO keyword", mode=SearchMode.SPARSE, top_k=2)
+    after = QDRANT_LATENCY._sum.get()
+
+    assert after > before
+
+
+def test_hybrid_search_records_qdrant_latency(populated_qdrant):
+    """QDRANT_LATENCY should increase after a hybrid search."""
+    from app.core.metrics import QDRANT_LATENCY
+
+    before = QDRANT_LATENCY._sum.get()
+    populated_qdrant.search("digital marketing", mode=SearchMode.HYBRID, top_k=2)
+    after = QDRANT_LATENCY._sum.get()
+
+    assert after > before
+
+
+def test_health_check_sets_qdrant_up_gauge(qdrant_service):
+    """health_check() should set QDRANT_UP to 1 when healthy."""
+    from app.core.metrics import QDRANT_UP
+
+    qdrant_service.health_check()
+    assert QDRANT_UP._value.get() == 1.0
+
+
+def test_health_check_updates_qdrant_up_on_failure(qdrant_service):
+    """QDRANT_UP should be set to 0 when health check fails."""
+    from app.core.metrics import QDRANT_UP
+    from unittest.mock import patch
+
+    with patch.object(
+        qdrant_service.client,
+        "get_collection",
+        side_effect=Exception("connection failed"),
+    ):
+        qdrant_service.health_check()
+
+    assert QDRANT_UP._value.get() == 0.0

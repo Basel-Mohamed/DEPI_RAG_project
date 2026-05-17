@@ -29,6 +29,9 @@ from qdrant_client.models import (
 from app.core.config import Settings, settings as global_settings
 from app.services.embedding.embedding_service import EmbeddingService
 
+import time
+from app.core.metrics import QDRANT_LATENCY, QDRANT_UP, CHUNKS_INGESTED
+
 logger = logging.getLogger(__name__)
 
 
@@ -164,11 +167,15 @@ class QdrantService:
         point_ids = [p.id for p in points]
 
         try:
+            # ── measure upsert latency ───────────────────────────────────────
+            start = time.perf_counter()
             self.client.upsert(
                 collection_name=self.collection,
                 points=points,
                 wait=True,
             )
+            QDRANT_LATENCY.observe(time.perf_counter() - start)
+            # ────────────────────────────────────────────────────────────────
         except Exception as e:
             logger.error("Upsert failed, attempting rollback: %s", e)
             self._rollback(point_ids)
@@ -190,6 +197,7 @@ class QdrantService:
             return {"upserted": 0, "failed": len(point_ids)}
 
         logger.info("Upserted %d chunks into '%s'.", len(points), self.collection)
+        CHUNKS_INGESTED.inc(len(points))
         return {"upserted": len(points), "failed": 0}
 
     def get_by_ids(self, point_ids: list[str]) -> list[dict[str, Any]]:
@@ -329,6 +337,9 @@ class QdrantService:
         score_threshold: float | None,
     ) -> list[dict[str, Any]]:
         dense_vec = self.embedding_service.embed_query(query)
+
+        # ── measure Qdrant search latency ────────────────────────────────────
+        start = time.perf_counter()
         results = self.client.query_points(
             collection_name=self.collection,
             query=dense_vec,
@@ -338,6 +349,8 @@ class QdrantService:
             score_threshold=score_threshold,
             with_payload=True,
         )
+        QDRANT_LATENCY.observe(time.perf_counter() - start)
+        # ────────────────────────────────────────────────────────────────────
         return [self._format_scored(r) for r in results.points]
 
     def _search_sparse(
@@ -348,6 +361,9 @@ class QdrantService:
         score_threshold: float | None,
     ) -> list[dict[str, Any]]:
         sparse_vec = next(self.sparse_model.query_embed(query))
+
+        # ── measure Qdrant search latency ────────────────────────────────────
+        start = time.perf_counter()
         results = self.client.query_points(
             collection_name=self.collection,
             query=SparseVector(
@@ -360,6 +376,8 @@ class QdrantService:
             score_threshold=score_threshold,
             with_payload=True,
         )
+        QDRANT_LATENCY.observe(time.perf_counter() - start)
+        # ────────────────────────────────────────────────────────────────────
         return [self._format_scored(r) for r in results.points]
 
     def _search_hybrid(
@@ -373,6 +391,8 @@ class QdrantService:
         dense_vec = self.embedding_service.embed_query(query)
         sparse_vec = next(self.sparse_model.query_embed(query))
 
+        # ── measure Qdrant search latency ────────────────────────────────────
+        start = time.perf_counter()
         results = self.client.query_points(
             collection_name=self.collection,
             prefetch=[
@@ -397,6 +417,9 @@ class QdrantService:
             score_threshold=score_threshold,
             with_payload=True,
         )
+        QDRANT_LATENCY.observe(time.perf_counter() - start)
+        # ────────────────────────────────────────────────────────────────────
+
         return [self._format_scored(r) for r in results.points]
 
     # ------------------------------------------------------------------
@@ -407,17 +430,20 @@ class QdrantService:
         """Return collection status and point count."""
         try:
             info = self.client.get_collection(self.collection)
+            is_healthy = info.status in [
+                models.CollectionStatus.GREEN,
+                models.CollectionStatus.YELLOW,
+            ]
+            QDRANT_UP.set(1 if is_healthy else 0)
             return {
                 "status": str(info.status),
                 "points_count": info.points_count,
                 "collection": self.collection,
-                "healthy": info.status in [
-                    models.CollectionStatus.GREEN,
-                    models.CollectionStatus.YELLOW,
-                ],
+                "healthy": is_healthy,
             }
         except Exception as e:
             logger.error("Health check failed: %s", e)
+            QDRANT_UP.set(0)
             return {"healthy": False, "error": str(e)}
 
     def collection_info(self) -> dict:

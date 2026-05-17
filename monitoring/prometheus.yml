@@ -1,0 +1,14 @@
+# Run Prometheus in deferent terminals with the following command:
+# E:\Progs\Prometheus\prometheus-3.11.2.windows-amd64\prometheus.exe --config.file="E:\A.I\Important files\Downloads\RAG_project\RAG_project\monitoring\prometheus.yml"
+
+# URL: http://localhost:8000
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: rag_api
+    static_configs:
+      - targets: ["localhost:8000"]
+    metrics_path: /metrics

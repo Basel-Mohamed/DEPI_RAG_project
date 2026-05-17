@@ -66,5 +66,13 @@ class Settings(BaseSettings):
     QUANTIZATION_QUANTILE: float = 0.99
     QUANTIZATION_ALWAYS_RAM: bool = True
 
+    # ------------------------------------------------------------------
+    # Environment & Monitoring
+    # ------------------------------------------------------------------
+    ENVIRONMENT: str = "development"
+    PROMETHEUS_URL: str = "http://localhost:9090"
+    GRAFANA_URL: str = "http://localhost:3000"
+    QDRANT_URL: str = "http://localhost:6333"
+
 
 settings = Settings()

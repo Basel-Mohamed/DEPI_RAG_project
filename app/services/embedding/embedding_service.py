@@ -1,8 +1,10 @@
+import time
 import logging
 from typing import Any
 
 from fastembed import TextEmbedding
 from app.core.config import Settings, settings as global_settings
+from app.core.metrics import EMBEDDING_LATENCY, CHUNKS_INGESTED
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,13 @@ class EmbeddingService:
             return []
 
         texts = [chunk["text"] for chunk in chunks]
+
+        # ── measure embedding latency ────────────────────────────────────────
+        start = time.perf_counter()
         embeddings = list(self.model.embed(texts))  # materialise the generator
+        EMBEDDING_LATENCY.observe(time.perf_counter() - start)
+        CHUNKS_INGESTED.inc(len(chunks))
+        # ────────────────────────────────────────────────────────────────────
 
         logger.info("Embedded %d chunks with model '%s'.", len(chunks), self.model_name)
 
@@ -43,4 +51,11 @@ class EmbeddingService:
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a single query string for retrieval."""
-        return list(self.model.query_embed(query))[0].tolist()
+
+        # ── measure query embedding latency ──────────────────────────────────
+        start = time.perf_counter()
+        result = list(self.model.query_embed(query))[0].tolist()
+        EMBEDDING_LATENCY.observe(time.perf_counter() - start)
+        # ────────────────────────────────────────────────────────────────────
+
+        return result

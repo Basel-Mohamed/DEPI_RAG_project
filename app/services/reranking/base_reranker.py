@@ -5,6 +5,8 @@ from typing import Any
 
 from app.services.types import RankedDocument, RetrievedContext
 
+import time
+from app.core.metrics import RERANKING_LATENCY
 
 class RerankerServiceError(RuntimeError):
     """Raised when the reranker cannot score or reorder documents."""
@@ -63,11 +65,16 @@ class BaseRerankerService(ABC):
         ]
 
         try:
+            # ── measure reranking latency ────────────────────────────────────
+            start = time.perf_counter()
             results = self._get_reranker().rerank(
                 documents=document_texts,
                 query=query.strip(),
                 top_n=len(document_texts),
             )
+            RERANKING_LATENCY.observe(time.perf_counter() - start)
+            # ────────────────────────────────────────────────────────────────
+
         except Exception as exc:
             raise RerankerServiceError("Reranking failed.") from exc
 
@@ -185,10 +192,15 @@ class BaseRerankerService(ABC):
                 ))
 
         try:
+            # ── measure compression latency ──────────────────────────────────
+            start = time.perf_counter()
             compressed_documents = self._get_reranker().compress_documents(
                 documents=langchain_documents,
                 query=query.strip(),
             )
+            RERANKING_LATENCY.observe(time.perf_counter() - start)
+            # ────────────────────────────────────────────────────────────────
+            
         except Exception as exc:
             raise RerankerServiceError(
                 "Document compression failed."

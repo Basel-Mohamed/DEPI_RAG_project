@@ -15,6 +15,8 @@ from app.services.llm.providers.base_llm import (
 )
 from app.services.types import RetrievedContext
 
+import time
+from app.core.metrics import LLM_LATENCY, LLM_TOKENS
 
 class CohereLlmService(BaseLlmService):
     """Cohere implementation backed by LangChain chat models."""
@@ -56,16 +58,32 @@ class CohereLlmService(BaseLlmService):
             return self.fallback_answer
 
         try:
+            # ── measure LLM latency ──────────────────────────────────────────
+            start = time.perf_counter()
             answer = build_langchain_chain(self._get_llm()).invoke(
                 {
                     "question": question.strip(),
                     "context": context,
                 }
             )
+            LLM_LATENCY.observe(time.perf_counter() - start)
+
+            # ── approximate token usage ──────────────────────────────────────
+            # LangChain abstracts the raw Cohere response so exact token counts
+            # are not directly available here. We approximate using character
+            # count divided by 4 (standard token approximation).
+            # When your team upgrades to raw Cohere SDK this can be replaced
+            # with exact counts from response.meta.tokens
+            answer_text = str(answer).strip()
+            prompt_text = question + context
+            LLM_TOKENS.labels(type="prompt").inc(len(prompt_text) // 4)
+            LLM_TOKENS.labels(type="completion").inc(len(answer_text) // 4)
+            # ────────────────────────────────────────────────────────────────
+
         except Exception as exc:
             raise LlmServiceError("Cohere answer generation failed.") from exc
 
-        return str(answer).strip() or self.fallback_answer
+        return answer_text or self.fallback_answer
 
     def stream(self, question: str, documents: list[RetrievedContext]) -> Iterator[str]:
         """Yield streamed answer chunks from the Cohere LangChain model."""
@@ -80,16 +98,34 @@ class CohereLlmService(BaseLlmService):
             return
 
         try:
+            # ── measure LLM streaming latency (time to first chunk) ──────────
+            start = time.perf_counter()
+            first_chunk = True
             yielded = False
+            full_response = []
+
             for chunk in stream_langchain_chain(
                 self._get_llm(),
                 question=question,
                 context=context,
             ):
+                if first_chunk:
+                    LLM_LATENCY.observe(time.perf_counter() - start)
+                    first_chunk = False
                 yielded = True
+                full_response.append(chunk)
                 yield chunk
+                
             if not yielded:
                 yield self.fallback_answer
+                return
+            
+            # ── approximate token usage ──────────────────────────────────────
+            prompt_text = question + context
+            LLM_TOKENS.labels(type="prompt").inc(len(prompt_text) // 4)
+            LLM_TOKENS.labels(type="completion").inc(len("".join(full_response)) // 4)
+            # ────────────────────────────────────────────────────────────────
+
         except Exception as exc:
             raise LlmServiceError("Cohere answer streaming failed.") from exc
 
