@@ -3,3 +3,4 @@ python_modules/
 __pycache__/
 .vscode/
 data/
+*.bin
