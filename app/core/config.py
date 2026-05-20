@@ -4,8 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    APP_NAME: str
-    APP_VERSION: str
+    APP_NAME: str = "rag_app"
+    APP_VERSION: str = "0.1.0"
 
     # ------------------------------------------------------------------
     # Chunking
@@ -65,6 +65,37 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     QUANTIZATION_QUANTILE: float = 0.99
     QUANTIZATION_ALWAYS_RAM: bool = True
+
+    # ------------------------------------------------------------------
+    # RAG inference
+    # ------------------------------------------------------------------
+    RAG_TOP_K: int = 5
+    RAG_RETRIEVAL_TOP_K: int = 10
+
+    # ------------------------------------------------------------------
+    # LLM
+    # ------------------------------------------------------------------
+    llm_provider: str = "cohere"
+    llm_temperature: float = 0.2
+    llm_max_tokens: int = 400
+
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_key: str | None = None
+    azure_openai_chat_deployment: str | None = None
+    azure_openai_api_version: str = "2024-02-01"
+
+    cohere_api_key: str | None = None
+    cohere_chat_model: str = "command-a-03-2025"
+
+    # ------------------------------------------------------------------
+    # Optional reranking
+    # ------------------------------------------------------------------
+    reranker_provider: str | None = None
+    reranker_top_n: int | None = 5
+    cohere_rerank_model: str = "rerank-v3.5"
+    azure_cohere_base_url: str | None = None
+    azure_cohere_api_key: str | None = None
+    azure_cohere_model: str = "model"
 
 
 settings = Settings()
