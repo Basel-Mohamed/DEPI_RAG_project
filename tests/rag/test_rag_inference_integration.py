@@ -7,7 +7,7 @@ import pytest
 
 from app.core.config import Settings
 from app.services.llm.llm_factory import create_llm_service
-from app.services.rag.rag_inference import RagInferenceError, RagInferencePipeline
+from app.services.rag.rag_inference import RagInferencePipeline
 
 
 class FixedVectorStore:
@@ -98,7 +98,7 @@ def test_rag_pipeline_calls_real_llm_and_returns_grounded_answer() -> None:
             "According to the support policy, when must warranty claims be submitted "
             "and which receipt code is required?"
         )
-    except RagInferenceError:
+    except Exception:
         pytest.fail(
             "The real LLM request failed. Check network access and LLM credentials.",
             pytrace=False,
@@ -132,7 +132,7 @@ def test_rag_pipeline_calls_real_azure_vision_with_retrieved_image() -> None:
             "What is the dominant color of the attached page image? "
             "Answer with one color word only."
         )
-    except RagInferenceError:
+    except Exception:
         pytest.fail(
             "The real Azure vision request failed. Check network access and LLM credentials.",
             pytrace=False,

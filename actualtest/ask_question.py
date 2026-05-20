@@ -13,7 +13,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 os.chdir(PROJECT_ROOT)
 
 from app.core.config import Settings
-from app.services.rag.rag_inference import RagInferenceError, RagInferencePipeline
+from app.services.rag.rag_inference import RagInferencePipeline
 
 
 def parse_args() -> argparse.Namespace:
@@ -134,7 +134,7 @@ def main() -> int:
             filter_field=filter_field,
             filter_value=filter_value,
         )
-    except RagInferenceError as exc:
+    except Exception as exc:
         print_json({"ok": False, "error": str(exc)})
         return 1
     finally:

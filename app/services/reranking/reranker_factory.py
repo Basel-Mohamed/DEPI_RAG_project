@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import logging
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.services.reranking.base_reranker import BaseRerankerService
 from app.services.reranking.providers.azure_reranker import AzureCohereRerankerService
 from app.services.reranking.providers.cohere_reranker import CohereRerankerService
+
+if TYPE_CHECKING:
+    from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class RerankerType(Enum):
@@ -151,3 +157,46 @@ class RerankerFactory:
             )
 
         return (reranker_type.value,)
+
+
+def create_reranker_service(settings: Settings) -> BaseRerankerService | None:
+    """Create the configured reranker service from application settings.
+
+    This mirrors the LLM factory style: callers provide ``Settings`` and the
+    reranker layer owns provider selection, credential validation, and model
+    defaults. Returning ``None`` means reranking is disabled.
+    """
+
+    provider = (getattr(settings, "reranker_provider", None) or "").lower()
+    if provider in {"", "none", "off", "false", "disabled"}:
+        return None
+
+    top_n = getattr(settings, "reranker_top_n", None)
+    if provider == RerankerType.COHERE.value:
+        api_key = getattr(settings, "cohere_api_key", None)
+        if not api_key:
+            logger.warning("Cohere reranker requested but COHERE_API_KEY is missing.")
+            return None
+        return RerankerFactory.create_cohere_reranker(
+            api_key=api_key,
+            model_name=getattr(settings, "cohere_rerank_model", "rerank-v3.5"),
+            top_n=top_n,
+        )
+
+    if provider == RerankerType.AZURE_COHERE.value:
+        api_key = getattr(settings, "azure_cohere_api_key", None)
+        base_url = getattr(settings, "azure_cohere_base_url", None)
+        if not api_key or not base_url:
+            logger.warning(
+                "Azure Cohere reranker requested but API key or base URL is missing."
+            )
+            return None
+        return RerankerFactory.create_azure_cohere_reranker(
+            api_key=api_key,
+            base_url=base_url,
+            model_name=getattr(settings, "azure_cohere_model", "model"),
+            top_n=top_n,
+        )
+
+    logger.warning("Unsupported reranker provider '%s'; reranking disabled.", provider)
+    return None
