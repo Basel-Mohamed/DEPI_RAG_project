@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+from app.services.rag.inference_helpers.media import MediaExtractor
+from app.services.rag.inference_helpers.response import RagResponseBuilder
 from app.services.rag.rag_inference import RagInferencePipeline
 from app.services.types import RetrievedContext
 
@@ -117,7 +119,6 @@ def test_run_normalizes_llm_text_and_source_media() -> None:
     response = pipeline.run("How do refunds work?")
 
     assert response["answer"] == "Refunds are available within 30 days."
-    assert response["images"] == []
     assert response["content"][0] == {
         "type": "text",
         "text": "Refunds are available within 30 days.",
@@ -161,3 +162,33 @@ def test_visual_questions_keep_retrieved_image_context() -> None:
     assert vector_store.last_score_threshold == 0.0
     assert any(source["media"] for source in response["sources"])
     assert response["sources"][-1]["id"] == "pdf-page-image"
+
+
+def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:
+    response_builder = RagResponseBuilder()
+
+    response = response_builder.build_delta("")
+
+    assert response["answer"] == ""
+    assert response["content"] == [{"type": "text", "text": ""}]
+
+
+def test_media_extractor_ignores_invalid_media_dictionaries() -> None:
+    media_extractor = MediaExtractor()
+
+    media = media_extractor.extract(
+        {
+            "media": {"foo": "bar"},
+            "attachments": [{"type": "image"}],
+            "image": {"url": "https://example.test/valid.png"},
+        },
+        source_id="chunk-1",
+    )
+
+    assert media == [
+        {
+            "type": "image",
+            "url": "https://example.test/valid.png",
+            "source_id": "chunk-1",
+        }
+    ]

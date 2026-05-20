@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from app.services.types import RankedDocument, RetrievedContext
+from app.services.types import RetrievedContext
 
 
 class RerankerServiceError(RuntimeError):
@@ -110,42 +110,7 @@ class BaseRerankerService(ABC):
             )
         return normalized_documents[:top_k]
 
-    def rank_with_scores(
-        self,
-        query: str,
-        documents: list[Any],
-        top_k: int | None = None,
-    ) -> list[RankedDocument]:
-        """Return reranked documents together with their relevance scores."""
-
-        if not query.strip() or not documents:
-            return []
-
-        if top_k is not None and top_k <= 0:
-            return []
-
-        scores = self.score(query, documents)
-        ranked_pairs = sorted(
-            enumerate(documents),
-            key=lambda item: scores[item[0]],
-            reverse=True,
-        )
-        ranked_documents = [
-            RankedDocument(
-                document=self._convert_to_retrieved_context(document),
-                score=float(scores[index]),
-            )
-            for index, document in ranked_pairs
-        ]
-        if top_k is None:
-            return (
-                ranked_documents[: self.top_n]
-                if self.top_n is not None
-                else ranked_documents
-            )
-        return ranked_documents[:top_k]
-
-    def compress(
+    def compress(  # useless can delete it 
         self,
         query: str,
         documents: list[Any],

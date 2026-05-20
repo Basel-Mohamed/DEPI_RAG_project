@@ -1,4 +1,4 @@
-from app.services.types import RankedDocument, RetrievedContext
+from app.services.types import RetrievedContext
 from app.services.reranking.base_reranker import RerankerServiceError
 from app.services.reranking.providers.cohere_reranker import (
     CohereRerankerService,
@@ -6,7 +6,6 @@ from app.services.reranking.providers.cohere_reranker import (
 
 __all__ = [
     "CohereRerankerService",
-    "RankedDocument",
     "RetrievedContext",
     "RerankerServiceError",
 ]

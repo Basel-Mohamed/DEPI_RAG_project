@@ -88,7 +88,6 @@ def compact_response(response: dict[str, Any]) -> dict[str, Any]:
         "answer": response.get("answer"),
         "retrieval": response.get("retrieval") or {},
         "sources": compact_sources(response.get("sources") or []),
-        "model_returned_images": response.get("images") or [],
     }
 
 
@@ -103,11 +102,6 @@ def print_human_response(response: dict[str, Any]) -> None:
     sources = compact_sources(response.get("sources") or [])
     print("\nSOURCES")
     print_json({"sources": sources})
-
-    images = response.get("images") or []
-    if images:
-        print("\nMODEL RETURNED IMAGES")
-        print_json({"image_count": len(images), "images": images})
 
 
 def main() -> int:

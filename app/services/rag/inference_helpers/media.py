@@ -74,6 +74,8 @@ class MediaExtractor:
                 "mime_type": value.get("mime_type") or value.get("media_type"),
                 "source_id": source_id,
             }
+            if not image["url"] and not image["data"]:
+                return
             media.append(
                 {key: item for key, item in image.items() if item not in (None, "")}
             )

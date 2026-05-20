@@ -206,7 +206,6 @@ class RagInferencePipeline:
             "event": "sources",
             "answer": "",
             "content": [],
-            "images": [],
             "sources": (
                 self.response_builder.build_sources(documents)
                 if include_sources
@@ -253,6 +252,3 @@ class RagInferencePipeline:
             "documents": len(documents),
             "mode": str(mode or getattr(self.settings, "RETRIEVAL_MODE", "hybrid")),
         }
-
-
-RagInferenceService = RagInferencePipeline
