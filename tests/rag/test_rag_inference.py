@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from app.services.rag.inference_helpers.media import MediaExtractor
+from app.services.media import MediaExtractor
 from app.services.rag.inference_helpers.response import RagResponseBuilder
 from app.services.rag.rag_inference import RagInferencePipeline
 from app.services.types import RetrievedContext
@@ -62,14 +62,10 @@ class FakeVisualVectorStore:
 
 
 class FakeLlmService:
-    def generate(self, question: str, documents: list[RetrievedContext]) -> dict[str, Any]:
+    def generate(self, question: str, documents: list[RetrievedContext]) -> str:
         assert question
         assert documents
-        return {
-            "content": [
-                {"type": "text", "text": "Refunds are available within 30 days."},
-            ]
-        }
+        return "Refunds are available within 30 days."
 
     def stream(self, question: str, documents: list[RetrievedContext]):
         yield "Refunds are available"

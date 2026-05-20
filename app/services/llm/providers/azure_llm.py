@@ -6,7 +6,8 @@ from typing import Any
 from app.services.llm.prompts import (
     build_context_text,
     build_langchain_chain,
-    build_support_prompt,
+    build_langchain_multimodal_messages,
+    build_multimodal_prompt_messages,
     build_prompt_messages,
     stream_langchain_chain,
 )
@@ -15,6 +16,7 @@ from app.services.llm.providers.base_llm import (
     BaseLlmService,
     LlmServiceError,
 )
+from app.services.media import MediaExtractor
 from app.services.types import RetrievedContext
 
 
@@ -44,6 +46,7 @@ class AzureLlmService(BaseLlmService):
         self.max_tokens = max_tokens
         self.fallback_answer = fallback_answer
         self.max_image_inputs = max_image_inputs
+        self.media_extractor = MediaExtractor()
 
     def build_context(self, documents: list[RetrievedContext]) -> str:
         return build_context_text(
@@ -60,33 +63,11 @@ class AzureLlmService(BaseLlmService):
         images = self._extract_image_urls(documents)
         if not images:
             return build_prompt_messages(question=question, context=context)
-
-        formatted_messages = build_support_prompt().format_messages(
-            question=question.strip(),
-            context=context or "No relevant context provided.",
+        return build_multimodal_prompt_messages(
+            question=question,
+            context=context,
+            image_urls=images,
         )
-        return [
-            {
-                "role": str(formatted_messages[0].type),
-                "content": str(formatted_messages[0].content),
-            },
-            {
-                "role": str(formatted_messages[1].type),
-                "content": [
-                    {
-                        "type": "text",
-                        "text": str(formatted_messages[1].content),
-                    },
-                    *[
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": image_url},
-                        }
-                        for image_url in images
-                    ],
-                ],
-            },
-        ]
 
     def generate(self, question: str, documents: list[RetrievedContext]) -> str:
         if not question.strip():
@@ -100,7 +81,7 @@ class AzureLlmService(BaseLlmService):
             images = self._extract_image_urls(documents)
             if images:
                 answer = self._get_llm().invoke(
-                    self._build_langchain_multimodal_messages(
+                    build_langchain_multimodal_messages(
                         question=question,
                         context=context,
                         image_urls=images,
@@ -135,7 +116,7 @@ class AzureLlmService(BaseLlmService):
             yielded = False
             images = self._extract_image_urls(documents)
             if images:
-                messages = self._build_langchain_multimodal_messages(
+                messages = build_langchain_multimodal_messages(
                     question=question,
                     context=context,
                     image_urls=images,
@@ -159,43 +140,6 @@ class AzureLlmService(BaseLlmService):
             raise LlmServiceError(
                 "Azure OpenAI answer streaming failed."
             ) from exc
-
-    def _build_langchain_multimodal_messages(
-        self,
-        *,
-        question: str,
-        context: str,
-        image_urls: list[str],
-    ) -> list[Any]:
-        try:
-            from langchain_core.messages import HumanMessage, SystemMessage
-        except ImportError as exc:
-            raise LlmServiceError(
-                "The 'langchain-core' package is required to use Azure multimodal prompts."
-            ) from exc
-
-        formatted_messages = build_support_prompt().format_messages(
-            question=question.strip(),
-            context=context or "No relevant context provided.",
-        )
-        return [
-            SystemMessage(content=str(formatted_messages[0].content)),
-            HumanMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": str(formatted_messages[1].content),
-                    },
-                    *[
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": image_url},
-                        }
-                        for image_url in image_urls
-                    ],
-                ]
-            ),
-        ]
 
     def _text_only_documents(
         self,
@@ -221,7 +165,10 @@ class AzureLlmService(BaseLlmService):
         image_urls: list[str] = []
         seen: set[str] = set()
         for document in documents:
-            for image_url in self._iter_metadata_images(document.metadata):
+            for image_url in self.media_extractor.extract_image_urls(
+                document.metadata,
+                source_id=document.id,
+            ):
                 if image_url in seen:
                     continue
                 seen.add(image_url)
@@ -229,63 +176,6 @@ class AzureLlmService(BaseLlmService):
                 if len(image_urls) >= self.max_image_inputs:
                     return image_urls
         return image_urls
-
-    def _iter_metadata_images(self, metadata: dict[str, Any]) -> Iterator[str]:
-        mime_type = str(metadata.get("page_image_mime_type") or "image/png")
-        for key in (
-            "page_image_base64",
-            "page_image_url",
-            "image_base64",
-            "image_url",
-            "image",
-            "images",
-            "media",
-            "attachments",
-        ):
-            if key not in metadata:
-                continue
-            yield from self._iter_image_value(metadata[key], mime_type=mime_type)
-
-    def _iter_image_value(self, value: Any, *, mime_type: str) -> Iterator[str]:
-        if value is None:
-            return
-
-        if isinstance(value, bytes):
-            import base64
-
-            encoded = base64.b64encode(value).decode("ascii")
-            yield f"data:{mime_type};base64,{encoded}"
-            return
-
-        if isinstance(value, str):
-            yield self._normalize_image_url(value, mime_type=mime_type)
-            return
-
-        if isinstance(value, dict):
-            image_url = value.get("image_url")
-            if isinstance(image_url, dict):
-                image_url = image_url.get("url")
-            candidate = (
-                image_url
-                or value.get("url")
-                or value.get("data")
-                or value.get("base64")
-                or value.get("b64_json")
-            )
-            if candidate:
-                yield self._normalize_image_url(str(candidate), mime_type=mime_type)
-            return
-
-        if isinstance(value, list):
-            for item in value:
-                yield from self._iter_image_value(item, mime_type=mime_type)
-
-    @staticmethod
-    def _normalize_image_url(value: str, *, mime_type: str) -> str:
-        stripped = value.strip()
-        if stripped.startswith(("data:", "http://", "https://")):
-            return stripped
-        return f"data:{mime_type};base64,{stripped}"
 
     @staticmethod
     def _is_image_metadata_key(key: str) -> bool:

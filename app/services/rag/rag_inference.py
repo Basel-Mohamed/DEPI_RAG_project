@@ -9,7 +9,7 @@ from app.services.llm.providers.base_llm import (
     DEFAULT_FALLBACK_ANSWER,
     BaseLlmService,
 )
-from app.services.rag.inference_helpers.media import MediaExtractor
+from app.services.media import MediaExtractor
 from app.services.rag.inference_helpers.response import RagResponseBuilder
 from app.services.rag.inference_helpers.retrieval import RetrievalPolicy
 from app.services.types import RetrievedContext

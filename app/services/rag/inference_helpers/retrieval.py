@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from app.services.rag.inference_helpers.media import MediaExtractor
+from app.services.media import MediaExtractor
 from app.services.types import RetrievedContext
 
 
