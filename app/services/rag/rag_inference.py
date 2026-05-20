@@ -9,10 +9,10 @@ from app.services.llm.providers.base_llm import (
     DEFAULT_FALLBACK_ANSWER,
     BaseLlmService,
 )
-from app.services.rag.media import MediaExtractor
-from app.services.rag.response import RagResponseBuilder
-from app.services.rag.retrieval import RetrievalPolicy
-from app.services.types import RankedDocument, RetrievedContext
+from app.services.rag.inference_helpers.media import MediaExtractor
+from app.services.rag.inference_helpers.response import RagResponseBuilder
+from app.services.rag.inference_helpers.retrieval import RetrievalPolicy
+from app.services.types import RetrievedContext
 
 if TYPE_CHECKING:
     from app.services.reranking.base_reranker import BaseRerankerService
@@ -140,7 +140,7 @@ class RagInferencePipeline:
         raw_results = self.vector_store.search(
             query=clean_question,
             top_k=search_top_k,
-            mode=self.retrieval_policy.coerce_search_mode(mode),
+            mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,
             score_threshold=self.retrieval_policy.effective_score_threshold(
@@ -229,7 +229,7 @@ class RagInferencePipeline:
         *,
         top_k: int,
     ) -> list[RetrievedContext]:
-        """Rerank documents and attach scores, falling back on retrieval order."""
+        """Rerank documents, falling back on retrieval order."""
 
         if not documents or top_k <= 0:
             return []
@@ -237,23 +237,10 @@ class RagInferencePipeline:
             return documents[:top_k]
 
         try:
-            ranked = self.reranker.rank_with_scores(question, documents, top_k=top_k)
+            return self.reranker.rerank(question, documents, top_k=top_k)
         except Exception:
             logger.exception("Reranking failed; falling back to retrieval order.")
             return documents[:top_k]
-
-        return [self._attach_rerank_score(item) for item in ranked]
-
-    @staticmethod
-    def _attach_rerank_score(item: RankedDocument) -> RetrievedContext:
-        """Copy a rerank score into document metadata without mutating input."""
-
-        return RetrievedContext(
-            id=item.document.id,
-            title=item.document.title,
-            content=item.document.content,
-            metadata={**item.document.metadata, "rerank_score": item.score},
-        )
 
     def _retrieval_metadata(
         self,

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.services.rag.rag_inference import RagInferencePipeline
-from app.services.types import RankedDocument, RetrievedContext
+from app.services.types import RetrievedContext
 
 
 class FakeVectorStore:
@@ -66,10 +66,6 @@ class FakeLlmService:
         return {
             "content": [
                 {"type": "text", "text": "Refunds are available within 30 days."},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": "data:image/png;base64,abc123"},
-                },
             ]
         }
 
@@ -79,15 +75,25 @@ class FakeLlmService:
 
 
 class FakeReranker:
-    def rank_with_scores(
+    def rerank(
         self,
         query: str,
         documents: list[RetrievedContext],
         top_k: int | None = None,
-    ) -> list[RankedDocument]:
+    ) -> list[RetrievedContext]:
         ranked = [
-            RankedDocument(document=documents[1], score=0.97),
-            RankedDocument(document=documents[0], score=0.91),
+            RetrievedContext(
+                id=documents[1].id,
+                title=documents[1].title,
+                content=documents[1].content,
+                metadata={**documents[1].metadata, "rerank_score": 0.97},
+            ),
+            RetrievedContext(
+                id=documents[0].id,
+                title=documents[0].title,
+                content=documents[0].content,
+                metadata={**documents[0].metadata, "rerank_score": 0.91},
+            ),
         ]
         return ranked[:top_k]
 
@@ -101,7 +107,7 @@ def _settings() -> SimpleNamespace:
     )
 
 
-def test_run_preserves_multimodal_llm_output_and_source_media() -> None:
+def test_run_normalizes_llm_text_and_source_media() -> None:
     pipeline = RagInferencePipeline(
         vector_store=FakeVectorStore(),
         llm_service=FakeLlmService(),
@@ -111,9 +117,7 @@ def test_run_preserves_multimodal_llm_output_and_source_media() -> None:
     response = pipeline.run("How do refunds work?")
 
     assert response["answer"] == "Refunds are available within 30 days."
-    assert response["images"] == [
-        {"type": "image", "url": "data:image/png;base64,abc123"}
-    ]
+    assert response["images"] == []
     assert response["content"][0] == {
         "type": "text",
         "text": "Refunds are available within 30 days.",

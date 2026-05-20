@@ -4,8 +4,11 @@ import base64
 from collections.abc import Mapping
 from typing import Any
 
-from app.services.rag.media import MediaExtractor
-from app.services.rag.output import GeneratedOutputNormalizer, GeneratedPayload
+from app.services.rag.inference_helpers.media import MediaExtractor
+from app.services.rag.inference_helpers.output import (
+    GeneratedOutputNormalizer,
+    GeneratedPayload,
+)
 from app.services.types import RetrievedContext
 
 SourcePayload = dict[str, Any]

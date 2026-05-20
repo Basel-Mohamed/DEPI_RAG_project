@@ -97,12 +97,9 @@ class BaseRerankerService(ABC):
             key=lambda item: scores[item[0]],
             reverse=True,
         )
-        ranked_documents = [document for _, document in ranked_pairs]
-
-        # Convert to unified RetrievedContext format
         normalized_documents = [
-            self._convert_to_retrieved_context(document) 
-            for document in ranked_documents
+            self._convert_to_retrieved_context(document, score=float(scores[index]))
+            for index, document in ranked_pairs
         ]
 
         if top_k is None:
@@ -134,7 +131,10 @@ class BaseRerankerService(ABC):
             reverse=True,
         )
         ranked_documents = [
-            RankedDocument(document=self._convert_to_retrieved_context(document), score=float(scores[index]))
+            RankedDocument(
+                document=self._convert_to_retrieved_context(document),
+                score=float(scores[index]),
+            )
             for index, document in ranked_pairs
         ]
         if top_k is None:
@@ -212,9 +212,16 @@ class BaseRerankerService(ABC):
                 )
         return ranked_documents
 
-    def _convert_to_retrieved_context(self, document: Any) -> RetrievedContext:
+    def _convert_to_retrieved_context(
+        self,
+        document: Any,
+        *,
+        score: float | None = None,
+    ) -> RetrievedContext:
         """Convert document to RetrievedContext for output consistency."""
         content, metadata = self._extract_content_and_metadata(document)
+        if score is not None:
+            metadata = {**metadata, "rerank_score": score}
         return RetrievedContext(
             id=str(metadata.get('_id', metadata.get('id', metadata.get('source_id', '')))),
             title=str(metadata.get('title', '')),

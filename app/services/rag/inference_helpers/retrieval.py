@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from app.services.rag.media import MediaExtractor
+from app.services.rag.inference_helpers.media import MediaExtractor
 from app.services.types import RetrievedContext
-
-if TYPE_CHECKING:
-    from app.services.vectorstore.qdrant_store import SearchMode
 
 
 class RetrievalPolicy:
@@ -89,18 +86,6 @@ class RetrievalPolicy:
             "صف",
         )
         return any(term in lowered for term in visual_terms)
-
-    @staticmethod
-    def coerce_search_mode(mode: SearchMode | str | None) -> SearchMode | str | None:
-        """Validate and normalize a search mode value for Qdrant search."""
-
-        if mode is None:
-            return mode
-        mode_value = getattr(mode, "value", mode)
-        normalized = str(mode_value).lower()
-        if normalized not in {"dense", "sparse", "hybrid"}:
-            raise ValueError("Search mode must be one of: dense, sparse, hybrid.")
-        return normalized
 
     @staticmethod
     def result_to_context(result: Mapping[str, Any]) -> RetrievedContext:
