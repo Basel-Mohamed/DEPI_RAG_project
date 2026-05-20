@@ -435,6 +435,12 @@ class QdrantService:
             },
         }
 
+    def close(self) -> None:
+        """Close the underlying Qdrant client if it supports explicit cleanup."""
+        close = getattr(self.client, "close", None)
+        if callable(close):
+            close()
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -451,6 +457,11 @@ class QdrantService:
             point_id = self._to_uuid(
                 f"{meta['source']}::{meta['page_number']}::{meta['chunk_index']}"
             )
+            payload = {
+                "text": chunk["text"],
+                **meta,
+            }
+
             points.append(
                 PointStruct(
                     id=point_id,
@@ -461,12 +472,7 @@ class QdrantService:
                             values=sparse_vec.values.tolist(),
                         ),
                     },
-                    payload={
-                        "text": chunk["text"],
-                        "source": meta["source"],
-                        "page_number": meta["page_number"],
-                        "chunk_index": meta["chunk_index"],
-                    },
+                    payload=payload,
                 )
             )
         return points

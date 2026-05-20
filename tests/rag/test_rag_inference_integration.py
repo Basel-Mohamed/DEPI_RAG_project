@@ -29,6 +29,27 @@ class FixedVectorStore:
         ]
 
 
+class FixedImageVectorStore:
+    def search(self, **_: Any) -> list[dict[str, Any]]:
+        red_square_png = (
+            "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4n"
+            "GP8z0AaYCJR/aiGUQ1DSAMAQC4BH2bjRnMAAAAASUVORK5CYII="
+        )
+        return [
+            {
+                "id": "integration-image-1",
+                "text": "Use the attached page image to answer visual questions.",
+                "score": 0.99,
+                "metadata": {
+                    "source": "visual-policy.pdf",
+                    "page_number": 1,
+                    "page_image_base64": f"data:image/png;base64,{red_square_png}",
+                    "page_image_mime_type": "image/png",
+                },
+            }
+        ]
+
+
 def _real_llm_settings() -> Settings:
     settings = Settings(
         RAG_TOP_K=1,
@@ -89,3 +110,33 @@ def test_rag_pipeline_calls_real_llm_and_returns_grounded_answer() -> None:
     assert "ALPHA-7" in answer
     assert response["sources"][0]["id"] == "integration-policy-1"
     assert response["retrieval"]["documents"] == 1
+
+
+@pytest.mark.integration
+def test_rag_pipeline_calls_real_azure_vision_with_retrieved_image() -> None:
+    if os.getenv("RUN_REAL_LLM_TESTS") != "1":
+        pytest.skip("Set RUN_REAL_LLM_TESTS=1 to call the configured LLM API.")
+
+    settings = _real_llm_settings()
+    if settings.llm_provider.lower() != "azure":
+        pytest.skip("This multimodal integration test currently targets Azure gpt-4o.")
+
+    pipeline = RagInferencePipeline(
+        vector_store=FixedImageVectorStore(),
+        llm_service=create_llm_service(settings),
+        settings=settings,
+    )
+
+    try:
+        response = pipeline.run(
+            "What is the dominant color of the attached page image? "
+            "Answer with one color word only."
+        )
+    except RagInferenceError:
+        pytest.fail(
+            "The real Azure vision request failed. Check network access and LLM credentials.",
+            pytrace=False,
+        )
+
+    assert "red" in response["answer"].lower()
+    assert response["sources"][0]["media"][0]["url"].startswith("data:image/png;base64,")

@@ -138,13 +138,23 @@ class RagInferencePipeline:
                 mode=self._coerce_search_mode(mode),
                 filter_field=filter_field,
                 filter_value=filter_value,
-                score_threshold=score_threshold,
+                score_threshold=self._effective_score_threshold(
+                    clean_question,
+                    score_threshold,
+                ),
             )
         except Exception as exc:
             raise RagInferenceError("Retrieval failed.") from exc
 
         documents = [self._result_to_context(result) for result in raw_results]
-        return self._rerank(clean_question, documents, top_k=final_top_k)
+        ranked_documents = self._rerank(clean_question, documents, top_k=final_top_k)
+        if self._is_visual_question(clean_question):
+            ranked_documents = self._ensure_visual_context(
+                ranked_documents,
+                documents,
+                top_k=final_top_k,
+            )
+        return ranked_documents
 
     def stream(
         self,
@@ -197,6 +207,12 @@ class RagInferencePipeline:
                 "mode": str(mode or getattr(self.settings, "RETRIEVAL_MODE", "hybrid")),
             },
         }
+
+    def close(self) -> None:
+        """Release resources held by the vector store."""
+        close = getattr(self.vector_store, "close", None)
+        if callable(close):
+            close()
 
     def _create_reranker(self) -> BaseRerankerService | None:
         provider = (getattr(self.settings, "reranker_provider", None) or "").lower()
@@ -254,6 +270,78 @@ class RagInferencePipeline:
             return documents[:top_k]
 
         return [self._attach_rerank_score(item) for item in ranked]
+
+    def _effective_score_threshold(
+        self,
+        question: str,
+        score_threshold: float | None,
+    ) -> float | None:
+        if score_threshold is not None:
+            return score_threshold
+        if self._is_visual_question(question):
+            return 0.0
+        return None
+
+    def _ensure_visual_context(
+        self,
+        ranked_documents: list[RetrievedContext],
+        retrieved_documents: list[RetrievedContext],
+        *,
+        top_k: int,
+    ) -> list[RetrievedContext]:
+        if any(self._context_has_media(document) for document in ranked_documents):
+            return ranked_documents
+
+        media_document = next(
+            (
+                document
+                for document in retrieved_documents
+                if self._context_has_media(document)
+            ),
+            None,
+        )
+        if media_document is None:
+            return ranked_documents
+
+        if len(ranked_documents) < top_k:
+            return [*ranked_documents, media_document]
+
+        if not ranked_documents:
+            return [media_document]
+
+        return [*ranked_documents[:-1], media_document]
+
+    def _context_has_media(self, document: RetrievedContext) -> bool:
+        return bool(self._extract_media(document.metadata, source_id=document.id))
+
+    @staticmethod
+    def _is_visual_question(question: str) -> bool:
+        lowered = question.lower()
+        visual_terms = (
+            "image",
+            "picture",
+            "photo",
+            "figure",
+            "diagram",
+            "chart",
+            "table",
+            "schedule",
+            "color",
+            "colour",
+            "shown",
+            "look at",
+            "visual",
+            "screenshot",
+            "column",
+            "row",
+            "الصورة",
+            "صورة",
+            "لون",
+            "جدول",
+            "عمود",
+            "صف",
+        )
+        return any(term in lowered for term in visual_terms)
 
     @staticmethod
     def _attach_rerank_score(item: RankedDocument) -> RetrievedContext:
