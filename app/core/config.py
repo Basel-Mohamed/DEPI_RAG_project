@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     APP_NAME: str
     APP_VERSION: str
+    LOG_LEVEL: str = "INFO"
 
     # ------------------------------------------------------------------
     # Chunking

@@ -1,0 +1,217 @@
+{
+  "info": {
+    "_postman_id": "2b7db5d5-f6d6-4bd1-82b2-df69509af0d6",
+    "name": "DEPI RAG - Build API",
+    "description": "Postman collection for the currently mounted DEPI RAG build routes. Set base_url to your API host, usually http://localhost:8000. Upload a PDF first; the upload response stores file_id as a collection variable.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "file_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "POST /files - Upload PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('upload succeeded', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body.file_id) {",
+                  "  pm.collectionVariables.set('file_id', body.file_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/files",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "files"
+              ]
+            },
+            "description": "Choose a local PDF in the file form field. The response stores file_id automatically for later build, status, and delete requests."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /files/build - Build All Files",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/files/build",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "files",
+                "build"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /files/build?file_id={{file_id}} - Build One File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/files/build?file_id={{file_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "files",
+                "build"
+              ],
+              "query": [
+                {
+                  "key": "file_id",
+                  "value": "{{file_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /files - List Files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/files",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "files"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /files?file_id={{file_id}} - Get File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/files?file_id={{file_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "files"
+              ],
+              "query": [
+                {
+                  "key": "file_id",
+                  "value": "{{file_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /files?file_id={{file_id}} - Delete One File",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/files?file_id={{file_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "files"
+              ],
+              "query": [
+                {
+                  "key": "file_id",
+                  "value": "{{file_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /files - Delete All Files",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/files",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "files"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

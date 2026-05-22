@@ -33,6 +33,10 @@ class EmbeddingService:
 
         texts = [chunk["text"] for chunk in chunks]
         embeddings = list(self.model.embed(texts))  # materialise the generator
+        if len(embeddings) != len(chunks):
+            raise RuntimeError(
+                f"Embedding provider returned {len(embeddings)} vectors for {len(chunks)} chunks."
+            )
 
         logger.info("Embedded %d chunks with model '%s'.", len(chunks), self.model_name)
 
