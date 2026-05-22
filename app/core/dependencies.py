@@ -2,6 +2,7 @@ import logging
 from functools import lru_cache
 
 from app.services.rag.rag_builder import BuildService
+from app.services.rag.rag_inference import RagInferencePipeline
 
 logger = logging.getLogger(__name__)
 
@@ -38,3 +39,9 @@ def get_build_service() -> BuildService:
         embedding_service=get_embedding_service(),
         vector_store=get_qdrant_service(),
     )
+
+
+@lru_cache
+def get_inference_pipeline() -> RagInferencePipeline:
+    logger.info("initializing inference pipeline")
+    return RagInferencePipeline(vector_store=get_qdrant_service())
