@@ -9,3 +9,10 @@ uploads/
 .qdrant/
 .pytest_cache/
 .env
+.env.txt
+env.txt
+.env_*
+qdrant_storage/*
+.env_mine.zip
+sshkeys.txt
+*.pem

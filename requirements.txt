@@ -1,4 +1,6 @@
 langchain
+langchain-openai
+langchain-cohere
 langchain-docling
 langchain_text_splitters
 pydantic
