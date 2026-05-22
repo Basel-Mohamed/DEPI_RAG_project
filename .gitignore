@@ -15,4 +15,4 @@ env.txt
 qdrant_storage/*
 .env_mine.zip
 sshkeys.txt
-*.pem
+*.pem   
