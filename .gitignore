@@ -8,3 +8,4 @@ qdrant_storage/
 uploads/
 .qdrant/
 .pytest_cache/
+.env
