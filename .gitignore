@@ -3,3 +3,8 @@ python_modules/
 __pycache__/
 
 .env_mine
+logs/
+qdrant_storage/
+uploads/
+.qdrant/
+.pytest_cache/

@@ -6,7 +6,8 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "rag_app"
     APP_VERSION: str = "0.1.0"
-
+    LOG_LEVEL: str = "INFO"
+    
     # ------------------------------------------------------------------
     # Chunking
     # ------------------------------------------------------------------
@@ -99,3 +100,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

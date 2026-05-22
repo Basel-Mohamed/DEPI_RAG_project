@@ -162,6 +162,12 @@ class QdrantService:
 
         points = self._build_points(embedded_chunks)
         point_ids = [p.id for p in points]
+        build_ids = {
+            chunk.get("metadata", {}).get("build_id")
+            for chunk in embedded_chunks
+            if chunk.get("metadata", {}).get("build_id")
+        }
+        rollback_build_id = next(iter(build_ids)) if len(build_ids) == 1 else None
 
         try:
             self.client.upsert(
@@ -171,7 +177,7 @@ class QdrantService:
             )
         except Exception as e:
             logger.error("Upsert failed, attempting rollback: %s", e)
-            self._rollback(point_ids)
+            self._rollback(point_ids, build_id=rollback_build_id)
             raise
 
         # Verify
@@ -186,7 +192,7 @@ class QdrantService:
 
         if failed_ids:
             logger.warning("Rolling back %d partially upserted points.", len(failed_ids))
-            self._rollback(point_ids)
+            self._rollback(point_ids, build_id=rollback_build_id)
             return {"upserted": 0, "failed": len(point_ids)}
 
         logger.info("Upserted %d chunks into '%s'.", len(points), self.collection)
@@ -212,31 +218,54 @@ class QdrantService:
         )
         logger.info("Updated payload for point %s.", point_id)
 
-    def delete_by_filter(self, filter_field: str, filter_value: Any) -> dict:
+    def delete_by_filter(
+        self,
+        filter_field: str,
+        filter_value: Any,
+        exclude: dict[str, Any] | None = None,
+    ) -> dict:
         """
         Delete all points matching a metadata field/value pair.
 
         Args:
             filter_field: metadata key, e.g. "source"
             filter_value: scalar or list of values
+            exclude: optional metadata values that should not be deleted
 
         Returns:
             {"deleted_count": int}
         """
-        count_before = self.client.count(self.collection).count
+        delete_filter = self._build_filter(filter_field, filter_value, exclude=exclude)
+        count_before = self.client.count(
+            collection_name=self.collection,
+            count_filter=delete_filter,
+            exact=True,
+        ).count
 
         self.client.delete(
             collection_name=self.collection,
             points_selector=models.FilterSelector(
-                filter=self._build_filter(filter_field, filter_value)
+                filter=delete_filter
             ),
             wait=True,
         )
 
-        count_after = self.client.count(self.collection).count
+        count_after = self.client.count(
+            collection_name=self.collection,
+            count_filter=delete_filter,
+            exact=True,
+        ).count
         deleted = count_before - count_after
         logger.info("Deleted %d points from '%s'.", deleted, self.collection)
         return {"deleted_count": deleted}
+
+    def count_by_filter(self, filter_field: str, filter_value: Any) -> int:
+        """Count all points matching a metadata field/value pair."""
+        return self.client.count(
+            collection_name=self.collection,
+            count_filter=self._build_filter(filter_field, filter_value),
+            exact=True,
+        ).count
 
     def delete_by_ids(self, point_ids: list[str]) -> dict:
         """Delete specific points by their IDs."""
@@ -449,6 +478,11 @@ class QdrantService:
         """Convert embedded chunks to Qdrant PointStructs with dense + sparse vectors."""
         texts = [c["text"] for c in embedded_chunks]
         sparse_embeddings = list(self.sparse_model.embed(texts))
+        if len(sparse_embeddings) != len(embedded_chunks):
+            raise RuntimeError(
+                f"Sparse provider returned {len(sparse_embeddings)} vectors for "
+                f"{len(embedded_chunks)} chunks."
+            )
 
         points = []
         for chunk, sparse_vec in zip(embedded_chunks, sparse_embeddings):
@@ -472,29 +506,54 @@ class QdrantService:
                             values=sparse_vec.values.tolist(),
                         ),
                     },
-                    payload=payload,
+                    payload={"text": chunk["text"], **meta},
                 )
             )
         return points
 
-    def _build_filter(self, field: str, value: Any) -> Filter:
+    def _build_filter(
+        self,
+        field: str,
+        value: Any,
+        exclude: dict[str, Any] | None = None,
+    ) -> Filter:
         """Build a Qdrant Filter for a single field/value pair."""
         condition = (
             FieldCondition(key=field, match=MatchAny(any=value))
             if isinstance(value, list)
             else FieldCondition(key=field, match=MatchValue(value=value))
         )
-        return Filter(must=[condition])
+        excluded_conditions = [
+            FieldCondition(key=excluded_field, match=MatchValue(value=excluded_value))
+            for excluded_field, excluded_value in (exclude or {}).items()
+        ]
+        return Filter(must=[condition], must_not=excluded_conditions or None)
 
-    def _rollback(self, point_ids: list) -> None:
+    def _rollback(self, point_ids: list, build_id: str | None = None) -> None:
         """Delete a list of point IDs — used to clean up on upsert failure."""
         try:
+            ids_to_delete = point_ids
+            if build_id:
+                fetched = self.client.retrieve(
+                    collection_name=self.collection,
+                    ids=point_ids,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                ids_to_delete = [
+                    point.id
+                    for point in fetched
+                    if point.payload and point.payload.get("build_id") == build_id
+                ]
+            if not ids_to_delete:
+                logger.warning("Rollback skipped: no points matched the failed build.")
+                return
             self.client.delete(
                 collection_name=self.collection,
-                points_selector=models.PointIdsList(points=point_ids),
+                points_selector=models.PointIdsList(points=ids_to_delete),
                 wait=True,
             )
-            logger.warning("Rollback successful: deleted %d points.", len(point_ids))
+            logger.warning("Rollback successful: deleted %d points.", len(ids_to_delete))
         except Exception as e:
             logger.error("Rollback failed: %s — manual cleanup may be needed.", e)
 
