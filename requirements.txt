@@ -3,6 +3,10 @@ langchain-docling
 langchain_text_splitters
 pydantic
 pydantic-settings
+fastapi
+python-multipart
+httpx
+uvicorn[standard]
 
 docling
 pytest
