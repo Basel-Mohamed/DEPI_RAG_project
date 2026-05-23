@@ -88,6 +88,7 @@ class QdrantService:
                     port=self.settings.QDRANT_PORT,
                     prefer_grpc=self.settings.QDRANT_PREFER_GRPC,
                     api_key=self.settings.QDRANT_API_KEY,
+                    https=self.settings.QDRANT_HTTPS,
                 )
                 logger.info(
                     "Connected to remote Qdrant at %s:%s",
