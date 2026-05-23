@@ -23,12 +23,14 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     METADATA_BACKEND: str = "sqlite"            # "sqlite" or "json"
     METADATA_DB_PATH: str = "uploads/app_metadata.sqlite3"
-    ARTIFACT_STORAGE_BACKEND: str = "local"     # "local" or "minio"
+    ARTIFACT_STORAGE_BACKEND: str = "local"     # "local", "minio", or "azure_blob"
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str | None = None
     MINIO_SECRET_KEY: str | None = None
     MINIO_BUCKET: str = "rag-artifacts"
     MINIO_SECURE: bool = False
+    AZURE_STORAGE_CONNECTION_STRING: str | None = None
+    AZURE_BLOB_CONTAINER: str = "rag-artifacts"
 
     # ------------------------------------------------------------------
     # Embedding

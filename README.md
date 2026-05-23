@@ -36,7 +36,10 @@ X-API-Key: <API_KEY>
 
 - Metadata uses SQLite by default: `METADATA_BACKEND=sqlite`, `METADATA_DB_PATH=uploads/app_metadata.sqlite3`.
 - `METADATA_BACKEND=json` is still available for tiny local experiments.
-- MinIO/S3-compatible artifact mirroring is enabled with `ARTIFACT_STORAGE_BACKEND=minio` plus `MINIO_*` settings.
+- Azure Blob artifact mirroring is enabled with `ARTIFACT_STORAGE_BACKEND=azure_blob`,
+  `AZURE_STORAGE_CONNECTION_STRING`, and `AZURE_BLOB_CONTAINER`.
+- MinIO/S3-compatible artifact mirroring is still available for local/self-hosted setups with
+  `ARTIFACT_STORAGE_BACKEND=minio` plus `MINIO_*` settings.
 - The current build job model is intentionally simple for one-admin operation: upload records metadata, build marks the file `building`, FastAPI runs one in-app background build, and SQLite persists the status.
 - For multi-admin or high-volume production, replace the in-app background job with a real queue/worker.
 
@@ -46,7 +49,7 @@ Target: Azure App Service for Containers + Azure Container Registry + Qdrant Clo
 
 1. Create Qdrant Cloud cluster and collection credentials.
 2. Create Azure Container Registry and App Service for Containers.
-3. Configure App Service settings from `.env.example`, especially `AUTH_ENABLED=True`, `API_KEY`, `QDRANT_REMOTE=True`, `QDRANT_HTTPS=True`, `QDRANT_HOST`, `QDRANT_PORT=6333`, `QDRANT_API_KEY`, and LLM provider credentials.
+3. Configure App Service settings from `.env.example`, especially `AUTH_ENABLED=True`, `API_KEY`, `QDRANT_REMOTE=True`, `QDRANT_HTTPS=True`, `QDRANT_HOST`, `QDRANT_PORT=6333`, `QDRANT_API_KEY`, LLM provider credentials, and Azure Blob artifact settings.
 4. Add GitHub secrets used by `.github/workflows/azure-app-service.yml`.
 5. Push to `main` or run the workflow manually.
 

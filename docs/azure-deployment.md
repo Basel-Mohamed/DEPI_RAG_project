@@ -25,6 +25,9 @@ COHERE_API_KEY=<cohere-key>
 MLFLOW_TRACKING_URI=file:./mlruns
 METADATA_BACKEND=sqlite
 METADATA_DB_PATH=uploads/app_metadata.sqlite3
+ARTIFACT_STORAGE_BACKEND=azure_blob
+AZURE_STORAGE_CONNECTION_STRING=<storage-account-connection-string>
+AZURE_BLOB_CONTAINER=rag-artifacts
 ```
 
 GitHub repository secrets:
@@ -39,9 +42,18 @@ Health probe:
 - Use `GET /health`.
 - Keep `/health` unauthenticated.
 
+Azure Blob artifact storage:
+
+1. Create an Azure Storage Account.
+2. Create a private Blob container, for example `rag-artifacts`.
+3. Copy the Storage Account connection string from **Security + networking → Access keys**.
+4. Add `ARTIFACT_STORAGE_BACKEND=azure_blob`, `AZURE_STORAGE_CONNECTION_STRING`, and
+   `AZURE_BLOB_CONTAINER=rag-artifacts` to App Service application settings.
+5. Restart the App Service.
+
 Production upgrade path:
 
-- Move `uploads/`, `mlruns/`, and `reports/` to Azure Blob Storage.
+- Use Azure Blob Storage for uploaded source files and other durable artifacts.
 - For one-admin deployments, SQLite metadata is acceptable. For multi-instance production, move metadata to PostgreSQL.
 - MinIO is a valid S3-compatible artifact store if you do not want Azure Blob Storage.
 - Send logs/metrics to Application Insights or Azure Monitor.

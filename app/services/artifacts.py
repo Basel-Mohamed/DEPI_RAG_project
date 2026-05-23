@@ -9,11 +9,21 @@ logger = logging.getLogger(__name__)
 
 
 class ArtifactStore:
-    """Store durable artifacts locally or in MinIO/S3-compatible storage."""
+    """Store durable artifacts locally, in MinIO/S3, or in Azure Blob Storage."""
 
     def put_file(self, local_path: str | Path, object_name: str) -> str | None:
-        if settings.ARTIFACT_STORAGE_BACKEND.lower() != "minio":
+        backend = settings.ARTIFACT_STORAGE_BACKEND.lower()
+        if backend == "local":
             return None
+        if backend == "minio":
+            return self._put_minio_file(local_path, object_name)
+        if backend == "azure_blob":
+            return self._put_azure_blob_file(local_path, object_name)
+        raise RuntimeError(
+            "Unsupported ARTIFACT_STORAGE_BACKEND. Use 'local', 'minio', or 'azure_blob'."
+        )
+
+    def _put_minio_file(self, local_path: str | Path, object_name: str) -> str:
         try:
             from minio import Minio
             from minio.error import S3Error
@@ -37,6 +47,42 @@ class ArtifactStore:
             logger.exception("failed to store artifact object=%s bucket=%s", object_name, settings.MINIO_BUCKET)
             raise
         return f"minio://{settings.MINIO_BUCKET}/{object_name}"
+
+    def _put_azure_blob_file(self, local_path: str | Path, object_name: str) -> str:
+        try:
+            from azure.core.exceptions import ResourceExistsError
+            from azure.storage.blob import BlobServiceClient
+        except ImportError as exc:
+            raise RuntimeError(
+                "The 'azure-storage-blob' package is required for Azure Blob artifact storage."
+            ) from exc
+
+        if not settings.AZURE_STORAGE_CONNECTION_STRING:
+            raise RuntimeError(
+                "AZURE_STORAGE_CONNECTION_STRING is required for Azure Blob artifact storage."
+            )
+
+        blob_service = BlobServiceClient.from_connection_string(
+            settings.AZURE_STORAGE_CONNECTION_STRING
+        )
+        container_client = blob_service.get_container_client(settings.AZURE_BLOB_CONTAINER)
+        try:
+            container_client.create_container()
+        except ResourceExistsError:
+            pass
+
+        try:
+            blob_client = container_client.get_blob_client(object_name)
+            with Path(local_path).open("rb") as file:
+                blob_client.upload_blob(file, overwrite=True)
+        except Exception:
+            logger.exception(
+                "failed to store artifact object=%s container=%s",
+                object_name,
+                settings.AZURE_BLOB_CONTAINER,
+            )
+            raise
+        return f"azure-blob://{settings.AZURE_BLOB_CONTAINER}/{object_name}"
 
 
 artifact_store = ArtifactStore()

@@ -16,3 +16,4 @@ fastembed
 qdrant_client
 mlflow
 minio
+azure-storage-blob
