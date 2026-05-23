@@ -14,6 +14,37 @@ Example request:
 curl.exe -H "X-API-Key: replace-with-a-secret-value" http://localhost:8000/files
 ```
 
+## User Feedback
+
+Use `POST /feedback` to persist answer-level feedback for KPI reporting.
+
+```powershell
+curl.exe -X POST http://localhost:8000/feedback `
+  -H "X-API-Key: replace-with-a-secret-value" `
+  -H "Content-Type: application/json" `
+  -d "{\"session_id\":\"session-123\",\"question\":\"What is the refund policy?\",\"answer\":\"Refunds are available within 30 days.\",\"rating\":1,\"timestamp\":\"2026-05-23T15:30:00Z\"}"
+```
+
+`rating` must be `1` for positive feedback or `-1` for negative feedback.
+
+List saved feedback:
+
+```powershell
+curl.exe -H "X-API-Key: replace-with-a-secret-value" http://localhost:8000/feedback
+```
+
+List feedback for one session:
+
+```powershell
+curl.exe -H "X-API-Key: replace-with-a-secret-value" "http://localhost:8000/feedback?session_id=session-123&limit=10"
+```
+
+Get the satisfaction KPI:
+
+```powershell
+curl.exe -H "X-API-Key: replace-with-a-secret-value" http://localhost:8000/feedback/satisfaction
+```
+
 ## Local Qdrant with Docker
 
 This project is configured to use a local Qdrant server over HTTP.
