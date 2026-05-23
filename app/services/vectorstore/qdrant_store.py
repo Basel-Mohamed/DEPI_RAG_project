@@ -87,8 +87,6 @@ class QdrantService:
                     url=url,
                     api_key=self.settings.QDRANT_API_KEY,
                     prefer_grpc=self.settings.QDRANT_PREFER_GRPC,
-                    https=self.settings.QDRANT_HTTPS,
-                    api_key=self.settings.QDRANT_API_KEY,
                 )
                 logger.info("Connected to remote Qdrant at %s", url)
             else:
