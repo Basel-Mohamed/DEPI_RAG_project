@@ -5,10 +5,11 @@ from fastapi.responses import StreamingResponse
 
 from app.controllers.inference_controller import InferenceController
 from app.core.dependencies import get_inference_pipeline
+from app.core.security import require_api_key
 from app.schemas.inference import InferenceRequest, InferenceResponse
 from app.services.rag.rag_inference import RagInferencePipeline
 
-router = APIRouter(tags=["inference"])
+router = APIRouter(tags=["inference"], dependencies=[Depends(require_api_key)])
 logger = logging.getLogger(__name__)
 
 

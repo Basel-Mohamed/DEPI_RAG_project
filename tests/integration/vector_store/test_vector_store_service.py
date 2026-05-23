@@ -378,6 +378,25 @@ def test_search_default_mode_from_settings(populated_qdrant):
     assert len(results) > 0
 
 
+def test_default_hybrid_threshold_is_disabled(qdrant_service):
+    threshold = qdrant_service._effective_score_threshold(SearchMode.HYBRID, None)
+
+    assert threshold is None
+
+
+def test_default_dense_and_sparse_threshold_use_settings(qdrant_service):
+    qdrant_service.settings.SCORE_THRESHOLD = 0.6
+
+    assert qdrant_service._effective_score_threshold(SearchMode.DENSE, None) == 0.6
+    assert qdrant_service._effective_score_threshold(SearchMode.SPARSE, None) == 0.6
+
+
+def test_explicit_threshold_wins_for_all_modes(qdrant_service):
+    assert qdrant_service._effective_score_threshold(SearchMode.HYBRID, 0.25) == 0.25
+    assert qdrant_service._effective_score_threshold(SearchMode.DENSE, 0.25) == 0.25
+    assert qdrant_service._effective_score_threshold(SearchMode.SPARSE, 0.25) == 0.25
+
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__, "-v"])

@@ -7,16 +7,21 @@ from fastapi import Request
 
 from app.api.routes.build import router as build_router
 from app.api.routes.inference import router as inference_router
+from app.api.routes.monitoring import router as monitoring_router
 from app.core.config import settings
 from app.core.logging import configure_logging, request_id_context
+from app.core.startup import validate_startup_settings
+from app.services.monitoring.grafana_service import metrics_service
 
 
 configure_logging()
+validate_startup_settings(settings)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
 app.include_router(build_router)
 app.include_router(inference_router)
+app.include_router(monitoring_router)
 
 
 @app.middleware("http")
@@ -30,6 +35,8 @@ async def log_requests(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        metrics_service.increment("http_errors_total")
+        metrics_service.observe_latency("http_request_ms", duration_ms)
         logger.exception(
             "request failed method=%s path=%s duration_ms=%s",
             request.method,
@@ -39,6 +46,10 @@ async def log_requests(request: Request, call_next):
         request_id_context.reset(token)
         raise
     duration_ms = round((time.perf_counter() - start) * 1000, 2)
+    metrics_service.increment("http_requests_total")
+    if response.status_code >= 500:
+        metrics_service.increment("http_errors_total")
+    metrics_service.observe_latency("http_request_ms", duration_ms)
     response.headers["x-request-id"] = request_id
     logger.info(
         "request completed method=%s path=%s status_code=%s duration_ms=%s",

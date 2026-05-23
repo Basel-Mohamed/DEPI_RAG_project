@@ -6,7 +6,11 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "rag_app"
     APP_VERSION: str = "0.1.0"
+    DEPLOYMENT_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+    AUTH_ENABLED: bool = False
+    API_KEY: str | None = None
+    API_KEY_HEADER: str = "X-API-Key"
     
     # ------------------------------------------------------------------
     # Chunking
@@ -15,10 +19,16 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 200
 
     # ------------------------------------------------------------------
-    # Image extraction
+    # Metadata and artifact storage
     # ------------------------------------------------------------------
-    IMAGE_SCALE: float = 2.0
-    IMAGE_FORMAT: str = "PNG"
+    METADATA_BACKEND: str = "sqlite"            # "sqlite" or "json"
+    METADATA_DB_PATH: str = "uploads/app_metadata.sqlite3"
+    ARTIFACT_STORAGE_BACKEND: str = "local"     # "local" or "minio"
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str | None = None
+    MINIO_SECRET_KEY: str | None = None
+    MINIO_BUCKET: str = "rag-artifacts"
+    MINIO_SECURE: bool = False
 
     # ------------------------------------------------------------------
     # Embedding
@@ -33,6 +43,8 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_PREFER_GRPC: bool = False
+    QDRANT_HTTPS: bool = False
+    QDRANT_API_KEY: str | None = None
     QDRANT_PATH: str = "./qdrant_storage"       # used only when QDRANT_REMOTE=False
 
     # ------------------------------------------------------------------
@@ -68,10 +80,10 @@ class Settings(BaseSettings):
     QUANTIZATION_ALWAYS_RAM: bool = True
 
     # ------------------------------------------------------------------
-    # RAG inference
+    # Retrieval and reranking
     # ------------------------------------------------------------------
-    RAG_TOP_K: int = 5
-    RAG_RETRIEVAL_TOP_K: int = 10
+    RETRIEVAL_CANDIDATE_TOP_K: int = 10
+    RERANKED_CONTEXT_TOP_K: int = 5
 
     # ------------------------------------------------------------------
     # LLM
@@ -92,11 +104,17 @@ class Settings(BaseSettings):
     # Optional reranking
     # ------------------------------------------------------------------
     reranker_provider: str | None = None
-    reranker_top_n: int | None = 5
     cohere_rerank_model: str = "rerank-v3.5"
     azure_cohere_base_url: str | None = None
     azure_cohere_api_key: str | None = None
     azure_cohere_model: str = "model"
+
+    # ------------------------------------------------------------------
+    # Evaluation and local MLflow tracking
+    # ------------------------------------------------------------------
+    MLFLOW_TRACKING_URI: str = "file:./mlruns"
+    EVAL_DATA_PATH: str = "data/evaluation/questions.json"
+    EVAL_OUTPUT_DIR: str = "reports/evaluation"
 
 
 settings = Settings()

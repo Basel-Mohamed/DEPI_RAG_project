@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Iterator
 from typing import Any
 
 from app.schemas.inference import InferenceRequest
+from app.services.llm.providers.base_llm import DEFAULT_FALLBACK_ANSWER
+from app.services.monitoring.grafana_service import metrics_service
 from app.services.rag.rag_inference import RagInferencePipeline
 
 logger = logging.getLogger(__name__)
+STREAM_ERROR_MESSAGE = "Inference failed. Check server logs for the request id."
 
 
 class InferenceController:
@@ -20,25 +24,33 @@ class InferenceController:
         filter_field, filter_value = self._filter_params(request)
 
         logger.info(
-            "inference started mode=%s top_k=%s retrieval_top_k=%s filter_field=%s",
+            "inference started mode=%s filter_field=%s",
             request.mode,
-            request.top_k,
-            request.retrieval_top_k,
             filter_field,
         )
-        response = self.pipeline.run(
-            question,
-            top_k=request.top_k,
-            retrieval_top_k=request.retrieval_top_k,
-            mode=request.mode,
-            filter_field=filter_field,
-            filter_value=filter_value,
-            score_threshold=request.score_threshold,
-            include_sources=request.include_sources,
-        )
+        start = time.perf_counter()
+        metrics_service.increment("inference_requests_total")
+        try:
+            response = self.pipeline.run(
+                question,
+                mode=request.mode,
+                filter_field=filter_field,
+                filter_value=filter_value,
+                score_threshold=request.score_threshold,
+                include_sources=request.include_sources,
+            )
+        except Exception:
+            metrics_service.increment("inference_errors_total")
+            raise
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        metrics_service.observe_latency("inference_ms", duration_ms)
+        documents = int(response.get("retrieval", {}).get("documents") or 0)
+        metrics_service.increment("retrieved_documents_total", documents)
+        if response.get("answer") == DEFAULT_FALLBACK_ANSWER:
+            metrics_service.increment("fallback_answers_total")
         logger.info(
             "inference completed documents=%s",
-            response.get("retrieval", {}).get("documents"),
+            documents,
         )
         return response
 
@@ -47,12 +59,11 @@ class InferenceController:
         filter_field, filter_value = self._filter_params(request)
 
         logger.info(
-            "inference stream started mode=%s top_k=%s retrieval_top_k=%s filter_field=%s",
+            "inference stream started mode=%s filter_field=%s",
             request.mode,
-            request.top_k,
-            request.retrieval_top_k,
             filter_field,
         )
+        metrics_service.increment("inference_requests_total")
         return self._stream_chunks(
             request,
             question=question,
@@ -69,17 +80,38 @@ class InferenceController:
         filter_value: Any,
     ) -> Iterator[str]:
         try:
+            start = time.perf_counter()
             for chunk in self.pipeline.stream(
                 question,
-                top_k=request.top_k,
-                retrieval_top_k=request.retrieval_top_k,
                 mode=request.mode,
                 filter_field=filter_field,
                 filter_value=filter_value,
                 score_threshold=request.score_threshold,
                 include_sources=request.include_sources,
             ):
+                documents = int(chunk.get("retrieval", {}).get("documents") or 0)
+                if documents:
+                    metrics_service.increment("retrieved_documents_total", documents)
+                if chunk.get("answer") == DEFAULT_FALLBACK_ANSWER:
+                    metrics_service.increment("fallback_answers_total")
                 yield json.dumps(chunk, ensure_ascii=False) + "\n"
+            metrics_service.observe_latency(
+                "inference_ms",
+                round((time.perf_counter() - start) * 1000, 2),
+            )
+        except Exception:
+            metrics_service.increment("inference_errors_total")
+            logger.exception("inference stream failed")
+            yield json.dumps(
+                {
+                    "event": "error",
+                    "answer": "",
+                    "content": [{"type": "text", "text": STREAM_ERROR_MESSAGE}],
+                    "sources": [],
+                    "retrieval": {},
+                },
+                ensure_ascii=False,
+            ) + "\n"
         finally:
             logger.info("inference stream completed")
 

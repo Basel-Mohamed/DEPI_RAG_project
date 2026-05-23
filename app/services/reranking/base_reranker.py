@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 from app.services.types import RetrievedContext
+
+logger = logging.getLogger(__name__)
 
 
 class RerankerServiceError(RuntimeError):
@@ -69,6 +72,7 @@ class BaseRerankerService(ABC):
                 top_n=len(document_texts),
             )
         except Exception as exc:
+            logger.exception("reranker scoring failed documents_count=%s", len(document_texts))
             raise RerankerServiceError("Reranking failed.") from exc
 
         scores = [0.0] * len(document_texts)
@@ -123,6 +127,7 @@ class BaseRerankerService(ABC):
         try:
             from langchain_core.documents import Document as LangChainDocument
         except ImportError as exc:
+            logger.exception("langchain-core is not installed")
             raise RerankerServiceError(
                 "The 'langchain-core' package is required to use reranker service."
             ) from exc
@@ -155,6 +160,7 @@ class BaseRerankerService(ABC):
                 query=query.strip(),
             )
         except Exception as exc:
+            logger.exception("reranker compression failed documents_count=%s", len(langchain_documents))
             raise RerankerServiceError(
                 "Document compression failed."
             ) from exc

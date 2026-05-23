@@ -1,7 +1,7 @@
 venv/
 python_modules/
 __pycache__/
-
+.vscode/
 .env_mine
 logs/
 qdrant_storage/
@@ -9,3 +9,5 @@ uploads/
 .qdrant/
 .pytest_cache/
 .env
+mlruns/
+reports/evaluation/

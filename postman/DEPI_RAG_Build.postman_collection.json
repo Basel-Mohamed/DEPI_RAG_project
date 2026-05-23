@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "2b7db5d5-f6d6-4bd1-82b2-df69509af0d6",
-    "name": "DEPI RAG - Build API",
-    "description": "Postman collection for the currently mounted DEPI RAG build routes. Set base_url to your API host, usually http://localhost:8000. Upload a PDF first; the upload response stores file_id as a collection variable.",
+    "name": "DEPI RAG - Build and Inference API",
+    "description": "Postman collection for the currently mounted DEPI RAG routes. Set base_url to your API host, usually http://localhost:8000. Upload a PDF first; the upload response stores file_id as a collection variable. Build requests are asynchronous: POST /files/build returns building, then poll GET /files or GET /files?file_id={{file_id}} until built or failed.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -15,8 +15,43 @@
       "key": "file_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "question",
+      "value": "What is this document about?",
+      "type": "string"
+    },
+    {
+      "key": "retrieval_mode",
+      "value": "hybrid",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "",
+      "type": "string"
     }
   ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
   "item": [
     {
       "name": "Health",
@@ -34,7 +69,71 @@
               "path": [
                 "health"
               ]
-            }
+            },
+            "description": "Basic API process health check."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Monitoring",
+      "description": "Operational endpoints. These inherit collection API-key auth when AUTH_ENABLED=True.",
+      "item": [
+        {
+          "name": "GET /monitoring/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/monitoring/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "monitoring",
+                "health"
+              ]
+            },
+            "description": "Application readiness and runtime configuration summary."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /monitoring/metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/monitoring/metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "monitoring",
+                "metrics"
+              ]
+            },
+            "description": "In-process counters and latency summaries."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /monitoring/rag-summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/monitoring/rag-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "monitoring",
+                "rag-summary"
+              ]
+            },
+            "description": "RAG-specific upload, build, inference, fallback, and latency summary."
           },
           "response": []
         }
@@ -42,6 +141,7 @@
     },
     {
       "name": "Files",
+      "description": "Upload, build, poll status, and delete PDF files. Build is asynchronous; use status endpoints after POST /files/build.",
       "item": [
         {
           "name": "POST /files - Upload PDF",
@@ -56,6 +156,11 @@
                   "});",
                   "",
                   "const body = pm.response.json();",
+                  "pm.test('upload response has file_id and uploaded status', function () {",
+                  "  pm.expect(body.file_id).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.status).to.eql('uploaded');",
+                  "});",
+                  "",
                   "if (body.file_id) {",
                   "  pm.collectionVariables.set('file_id', body.file_id);",
                   "}"
@@ -85,12 +190,35 @@
                 "files"
               ]
             },
-            "description": "Choose a local PDF in the file form field. The response stores file_id automatically for later build, status, and delete requests."
+            "description": "Choose a local PDF in the file form field. The response stores file_id automatically for later build, ask, status, and delete requests."
           },
           "response": []
         },
         {
-          "name": "POST /files/build - Build All Files",
+          "name": "POST /files/build - Build All Files (Async)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('build request accepted', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('build response contains files array', function () {",
+                  "  pm.expect(body.files).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('returned file statuses are valid async statuses', function () {",
+                  "  const statuses = ['uploaded', 'building', 'built', 'failed', 'missing'];",
+                  "  body.files.forEach(file => pm.expect(statuses).to.include(file.status));",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [],
@@ -103,12 +231,36 @@
                 "files",
                 "build"
               ]
-            }
+            },
+            "description": "Schedules background builds for all uploaded files. This returns immediately, usually with status building. Poll GET /files for completion."
           },
           "response": []
         },
         {
-          "name": "POST /files/build?file_id={{file_id}} - Build One File",
+          "name": "POST /files/build?file_id={{file_id}} - Build One File (Async)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('build request accepted', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('one file returned', function () {",
+                  "  pm.expect(body.files).to.be.an('array').with.lengthOf(1);",
+                  "});",
+                  "",
+                  "pm.test('file is scheduled or already in a terminal state', function () {",
+                  "  const status = body.files[0].status;",
+                  "  pm.expect(['building', 'built', 'failed', 'missing', 'uploaded']).to.include(status);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [],
@@ -127,12 +279,30 @@
                   "value": "{{file_id}}"
                 }
               ]
-            }
+            },
+            "description": "Schedules a background build for the selected file_id. If the same file is already building, no duplicate build is started."
           },
           "response": []
         },
         {
-          "name": "GET /files - List Files",
+          "name": "GET /files - List Files / Poll All",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('list succeeded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('response is an array', function () {",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
@@ -144,12 +314,31 @@
               "path": [
                 "files"
               ]
-            }
+            },
+            "description": "Lists known uploads. Use this after a build request to poll for built or failed status."
           },
           "response": []
         },
         {
-          "name": "GET /files?file_id={{file_id}} - Get File",
+          "name": "GET /files?file_id={{file_id}} - Get File / Poll One",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('lookup succeeded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('status is valid', function () {",
+                  "  pm.expect(['uploaded', 'building', 'built', 'failed', 'missing']).to.include(body.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
@@ -167,7 +356,8 @@
                   "value": "{{file_id}}"
                 }
               ]
-            }
+            },
+            "description": "Poll this endpoint until status is built or failed before asking questions scoped to the file."
           },
           "response": []
         },
@@ -190,7 +380,8 @@
                   "value": "{{file_id}}"
                 }
               ]
-            }
+            },
+            "description": "Deletes one uploaded file record, its local PDF, and vectors for that file source."
           },
           "response": []
         },
@@ -207,7 +398,233 @@
               "path": [
                 "files"
               ]
+            },
+            "description": "Deletes all uploaded file records, local PDFs, and vectors for those file sources."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Inference",
+      "description": "Ask questions against the built vector index. Retrieval top-k and rerank/final top-k are controlled by server settings only, not request body fields.",
+      "item": [
+        {
+          "name": "POST /ask - Ask Across All Built Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ask succeeded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('answer response shape is valid', function () {",
+                  "  pm.expect(body.answer).to.be.a('string');",
+                  "  pm.expect(body.content).to.be.an('array');",
+                  "  pm.expect(body.sources).to.be.an('array');",
+                  "  pm.expect(body.retrieval).to.be.an('object');",
+                  "});"
+                ]
+              }
             }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"{{question}}\",\n  \"mode\": \"{{retrieval_mode}}\",\n  \"include_sources\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask"
+              ]
+            },
+            "description": "Ask across the full index. Do not send top_k or retrieval_top_k; the server reads RETRIEVAL_CANDIDATE_TOP_K and RERANKED_CONTEXT_TOP_K from settings."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /ask - Ask One Uploaded File",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ask succeeded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.test('response has retrieval metadata', function () {",
+                  "  pm.expect(body.retrieval).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"{{question}}\",\n  \"source\": \"{{file_id}}\",\n  \"mode\": \"{{retrieval_mode}}\",\n  \"include_sources\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask"
+              ]
+            },
+            "description": "Ask only against one uploaded file by filtering metadata.source to the stored file_id."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /ask - Ask With Custom Metadata Filter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"{{question}}\",\n  \"filter_field\": \"source\",\n  \"filter_value\": \"{{file_id}}\",\n  \"mode\": \"{{retrieval_mode}}\",\n  \"include_sources\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask"
+              ]
+            },
+            "description": "Equivalent to source for this example. Use either source or filter_field/filter_value, never both."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /ask - Ask Without Sources",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"{{question}}\",\n  \"mode\": \"{{retrieval_mode}}\",\n  \"include_sources\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask"
+              ]
+            },
+            "description": "Returns the answer and retrieval metadata without source payloads."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /ask - Ask With Explicit Score Threshold",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"{{question}}\",\n  \"mode\": \"{{retrieval_mode}}\",\n  \"score_threshold\": 0.25,\n  \"include_sources\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask"
+              ]
+            },
+            "description": "Optional explicit score threshold. If omitted, hybrid mode does not use the default threshold; dense/sparse use SCORE_THRESHOLD from settings."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /ask/stream - Stream Answer NDJSON",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('stream request accepted', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('content type is ndjson-compatible', function () {",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('application/x-ndjson');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"{{question}}\",\n  \"source\": \"{{file_id}}\",\n  \"mode\": \"{{retrieval_mode}}\",\n  \"include_sources\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/ask/stream",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask",
+                "stream"
+              ]
+            },
+            "description": "Streams newline-delimited JSON chunks. Events can include delta, sources, or error. Do not send top_k or retrieval_top_k."
           },
           "response": []
         }

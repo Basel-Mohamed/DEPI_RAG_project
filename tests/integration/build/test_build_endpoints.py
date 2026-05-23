@@ -23,11 +23,11 @@ class FakeDocumentProcessor:
             },
         ]
 
-    def process_document(self, file_path: str | Path) -> tuple[list[dict], dict[int, bytes]]:
+    def process_document(self, file_path: str | Path) -> list[dict]:
         path = Path(file_path)
         assert path.exists()
         self.seen_paths.append(path)
-        return ([{**chunk, "metadata": dict(chunk["metadata"])} for chunk in self.chunks], {1: b"image-bytes"})
+        return [{**chunk, "metadata": dict(chunk["metadata"])} for chunk in self.chunks]
 
 
 class FakeEmbeddingService:
@@ -84,8 +84,19 @@ class FakeVectorStore:
         )
 
 
+class FailingBuildService:
+    def build_document(self, file_path: Path, source: str | None = None) -> dict:
+        raise RuntimeError("conversion failed")
+
+    def get_document_status(self, source: str) -> dict:
+        return {"source": source, "chunks_count": 0}
+
+    def delete_document(self, source: str) -> dict:
+        return {"source": source, "deleted_count": 0}
+
+
 @pytest.fixture
-def fake_build_stack():
+def fake_build_stack(tmp_path):
     processor = FakeDocumentProcessor()
     vector_store = FakeVectorStore()
     service = BuildService(
@@ -101,6 +112,7 @@ def client(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
+    BuildController.building_file_ids.clear()
     app.dependency_overrides[get_build_service] = lambda: service
     with TestClient(app) as test_client:
         yield test_client
@@ -140,11 +152,9 @@ def test_file_lifecycle_endpoints_upload_build_list_get_and_delete(client, fake_
             "file_id": file_id,
             "filename": "sample.pdf",
             "content_type": "application/pdf",
-            "status": "built",
-            "chunks_count": 2,
-            "page_images_count": 1,
-            "chunks_with_page_images_count": 2,
-            "upserted": 2,
+            "status": "building",
+            "chunks_count": 0,
+            "upserted": 0,
             "failed": 0,
             "last_error": None,
         }
@@ -217,10 +227,66 @@ def test_rebuild_removes_stale_chunks_for_same_source(client, fake_build_stack):
     ]
     second_response = client.post(f"/files/build?file_id={file_id}")
     assert second_response.status_code == 200
+    assert second_response.json()["files"][0]["status"] == "building"
 
     source_points = vector_store.scroll("source", file_id, limit=10)
     assert len(source_points) == 1
     assert source_points[0]["text"] == "Only one chunk after rebuild."
+
+
+def test_duplicate_build_request_while_building_does_not_schedule_again(
+    client,
+    fake_build_stack,
+):
+    service, _, _ = fake_build_stack
+    upload_response = client.post(
+        "/files",
+        files={"file": ("sample.pdf", b"%PDF-1.4 fake pdf bytes", "application/pdf")},
+    )
+    file_id = upload_response.json()["file_id"]
+    BuildController.building_file_ids.add(file_id)
+
+    response = client.post(f"/files/build?file_id={file_id}")
+
+    assert response.status_code == 200
+    assert response.json()["files"][0]["status"] == "uploaded"
+    assert service.vector_store.points == []
+    BuildController.building_file_ids.discard(file_id)
+
+
+def test_background_build_failure_sets_failed_status(tmp_path, monkeypatch):
+    monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
+    monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
+    BuildController.building_file_ids.clear()
+    controller = BuildController(FailingBuildService())
+    file_path = tmp_path / "uploads" / "file-123.pdf"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_bytes(b"%PDF-1.4 fake pdf bytes")
+    now = BuildController._utc_now()
+    controller._write_registry(
+        {
+            "file-123": {
+                "file_id": "file-123",
+                "filename": "sample.pdf",
+                "content_type": "application/pdf",
+                "path": str(file_path),
+                "status": "uploaded",
+                "chunks_count": 0,
+                "upserted": 0,
+                "failed": 0,
+                "last_error": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+        }
+    )
+
+    response = controller.build_files(file_id="file-123")
+
+    assert response["files"][0]["status"] == "building"
+    status = controller.get_file("file-123")
+    assert status["status"] == "failed"
+    assert status["last_error"] == "conversion failed"
 
 
 def test_legacy_direct_build_routes_are_not_available(client):

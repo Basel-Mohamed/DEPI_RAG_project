@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any
 
 from app.services.llm.prompts import (
     build_context_text,
     build_langchain_chain,
-    build_langchain_multimodal_messages,
-    build_multimodal_prompt_messages,
     build_prompt_messages,
     stream_langchain_chain,
 )
@@ -16,8 +15,9 @@ from app.services.llm.providers.base_llm import (
     BaseLlmService,
     LlmServiceError,
 )
-from app.services.media import MediaExtractor
 from app.services.types import RetrievedContext
+
+logger = logging.getLogger(__name__)
 
 
 class AzureLlmService(BaseLlmService):
@@ -36,7 +36,6 @@ class AzureLlmService(BaseLlmService):
         temperature: float = 0.2,
         max_tokens: int = 400,
         fallback_answer: str = DEFAULT_FALLBACK_ANSWER,
-        max_image_inputs: int = 4,
     ) -> None:
         self.azure_endpoint = azure_endpoint.rstrip("/")
         self.api_key = api_key
@@ -45,8 +44,6 @@ class AzureLlmService(BaseLlmService):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.fallback_answer = fallback_answer
-        self.max_image_inputs = max_image_inputs
-        self.media_extractor = MediaExtractor()
 
     def build_context(self, documents: list[RetrievedContext]) -> str:
         return build_context_text(
@@ -60,14 +57,7 @@ class AzureLlmService(BaseLlmService):
         documents: list[RetrievedContext],
     ) -> list[dict[str, Any]]:
         context = self.build_context(documents)
-        images = self._extract_image_urls(documents)
-        if not images:
-            return build_prompt_messages(question=question, context=context)
-        return build_multimodal_prompt_messages(
-            question=question,
-            context=context,
-            image_urls=images,
-        )
+        return build_prompt_messages(question=question, context=context)
 
     def generate(self, question: str, documents: list[RetrievedContext]) -> str:
         if not question.strip():
@@ -78,17 +68,6 @@ class AzureLlmService(BaseLlmService):
             return self.fallback_answer
 
         try:
-            images = self._extract_image_urls(documents)
-            if images:
-                answer = self._get_llm().invoke(
-                    build_langchain_multimodal_messages(
-                        question=question,
-                        context=context,
-                        image_urls=images,
-                    )
-                )
-                return self._extract_text(answer) or self.fallback_answer
-
             answer = build_langchain_chain(self._get_llm()).invoke(
                 {
                     "question": question.strip(),
@@ -96,6 +75,7 @@ class AzureLlmService(BaseLlmService):
                 }
             )
         except Exception as exc:
+            logger.exception("Azure OpenAI answer generation failed")
             raise LlmServiceError(
                 "Azure OpenAI answer generation failed."
             ) from exc
@@ -114,29 +94,17 @@ class AzureLlmService(BaseLlmService):
 
         try:
             yielded = False
-            images = self._extract_image_urls(documents)
-            if images:
-                messages = build_langchain_multimodal_messages(
-                    question=question,
-                    context=context,
-                    image_urls=images,
-                )
-                for chunk in self._get_llm().stream(messages):
-                    text = self._extract_text(chunk, strip=False)
-                    if text:
-                        yielded = True
-                        yield text
-            else:
-                for chunk in stream_langchain_chain(
-                    self._get_llm(),
-                    question=question,
-                    context=context,
-                ):
-                    yielded = True
-                    yield chunk
+            for chunk in stream_langchain_chain(
+                self._get_llm(),
+                question=question,
+                context=context,
+            ):
+                yielded = True
+                yield chunk
             if not yielded:
                 yield self.fallback_answer
         except Exception as exc:
+            logger.exception("Azure OpenAI answer streaming failed")
             raise LlmServiceError(
                 "Azure OpenAI answer streaming failed."
             ) from exc
@@ -155,30 +123,14 @@ class AzureLlmService(BaseLlmService):
                     metadata={
                         key: value
                         for key, value in document.metadata.items()
-                        if not self._is_image_metadata_key(key)
+                        if not self._is_non_text_metadata_key(key)
                     },
                 )
             )
         return cleaned_documents
 
-    def _extract_image_urls(self, documents: list[RetrievedContext]) -> list[str]:
-        image_urls: list[str] = []
-        seen: set[str] = set()
-        for document in documents:
-            for image_url in self.media_extractor.extract_image_urls(
-                document.metadata,
-                source_id=document.id,
-            ):
-                if image_url in seen:
-                    continue
-                seen.add(image_url)
-                image_urls.append(image_url)
-                if len(image_urls) >= self.max_image_inputs:
-                    return image_urls
-        return image_urls
-
     @staticmethod
-    def _is_image_metadata_key(key: str) -> bool:
+    def _is_non_text_metadata_key(key: str) -> bool:
         normalized = key.lower()
         return any(
             token in normalized
@@ -218,6 +170,7 @@ class AzureLlmService(BaseLlmService):
         )
         if self.__class__._singleton_llm is not None:
             if self.__class__._singleton_config != config:
+                logger.error("AzureLlmService singleton requested with conflicting configuration")
                 raise LlmServiceError(
                     "AzureLlmService singleton was already initialized with a different configuration."
                 )
@@ -226,11 +179,13 @@ class AzureLlmService(BaseLlmService):
         try:
             from langchain_openai import AzureChatOpenAI
         except ImportError as exc:
+            logger.exception("langchain-openai is not installed")
             raise LlmServiceError(
                 "The 'langchain-openai' package is required to use "
                 "AzureLlmService."
             ) from exc
 
+        logger.info("creating AzureChatOpenAI client deployment=%s", self.deployment_name)
         self.__class__._singleton_llm = AzureChatOpenAI(
             api_key=self.api_key,
             azure_endpoint=self.azure_endpoint,

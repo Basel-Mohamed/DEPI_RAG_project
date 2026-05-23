@@ -1,38 +1,39 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+from pathlib import Path
 from typing import Any
 
-from app.services.rag.rag_builder import RagBuildPipeline
-from app.services.vectorstore.qdrant_store import QdrantService
+import pytest
+
+from app.services.rag.rag_builder import BuildService
+
+qdrant_store = pytest.importorskip(
+    "app.services.vectorstore.qdrant_store",
+    reason="Qdrant vector-store dependencies are not installed.",
+)
+QdrantService = qdrant_store.QdrantService
 
 
 class FakeDocumentProcessor:
-    def process_document(self, file_path: str) -> tuple[list[dict[str, Any]], dict[int, bytes]]:
-        return (
-            [
-                {
-                    "text": "The warranty policy is valid for 14 days.",
-                    "metadata": {
-                        "source": file_path,
-                        "page_number": 1,
-                        "chunk_index": 0,
-                    },
-                },
-                {
-                    "text": "Receipt code ALPHA-7 is required.",
-                    "metadata": {
-                        "source": file_path,
-                        "page_number": 2,
-                        "chunk_index": 0,
-                    },
-                },
-            ],
+    def process_document(self, file_path: str | Path) -> list[dict[str, Any]]:
+        return [
             {
-                1: b"page-one-image",
-                2: b"page-two-image",
+                "text": "The warranty policy is valid for 14 days.",
+                "metadata": {
+                    "source": str(file_path),
+                    "page_number": 1,
+                    "chunk_index": 0,
+                },
             },
-        )
+            {
+                "text": "Receipt code ALPHA-7 is required.",
+                "metadata": {
+                    "source": str(file_path),
+                    "page_number": 2,
+                    "chunk_index": 0,
+                },
+            },
+        ]
 
 
 class FakeEmbeddingService:
@@ -42,11 +43,16 @@ class FakeEmbeddingService:
 
 class FakeVectorStore:
     def __init__(self) -> None:
-        self.deleted: list[tuple[str, Any]] = []
+        self.deleted: list[tuple[str, Any, dict[str, Any] | None]] = []
         self.upserted_chunks: list[dict[str, Any]] = []
 
-    def delete_by_filter(self, filter_field: str, filter_value: Any) -> dict[str, int]:
-        self.deleted.append((filter_field, filter_value))
+    def delete_by_filter(
+        self,
+        filter_field: str,
+        filter_value: Any,
+        exclude: dict[str, Any] | None = None,
+    ) -> dict[str, int]:
+        self.deleted.append((filter_field, filter_value, exclude))
         return {"deleted_count": 1}
 
     def upsert(self, embedded_chunks: list[dict[str, Any]]) -> dict[str, int]:
@@ -73,64 +79,50 @@ class FakeSparseModel:
             yield _SparseVector()
 
 
-def test_build_embeds_and_upserts_chunks_with_page_images() -> None:
+def test_build_embeds_and_upserts_text_chunks() -> None:
     vector_store = FakeVectorStore()
-    pipeline = RagBuildPipeline(
+    service = BuildService(
         document_processor=FakeDocumentProcessor(),
         embedding_service=FakeEmbeddingService(),
         vector_store=vector_store,
-        settings=SimpleNamespace(IMAGE_FORMAT="PNG"),
     )
 
-    summary = pipeline.build("policy.pdf", replace_existing=True)
+    summary = service.build_document("policy.pdf", source="policy.pdf")
 
     assert summary == {
         "source": "policy.pdf",
-        "chunks": 2,
-        "page_images": 2,
+        "chunks_count": 2,
         "upserted": 2,
         "failed": 0,
     }
-    assert vector_store.deleted == [("source", "policy.pdf")]
     assert len(vector_store.upserted_chunks) == 2
     first_metadata = vector_store.upserted_chunks[0]["metadata"]
-    assert first_metadata["page_image_mime_type"] == "image/png"
-    assert first_metadata["page_image_base64"].startswith("data:image/png;base64,")
+    assert first_metadata["source"] == "policy.pdf"
+    assert first_metadata["page_number"] == 1
+    assert "page_image_path" not in first_metadata
+    assert "page_image_url" not in first_metadata
+    assert vector_store.deleted[0][0:2] == ("source", "policy.pdf")
 
 
-def test_build_can_skip_page_image_attachment() -> None:
-    vector_store = FakeVectorStore()
-    pipeline = RagBuildPipeline(
-        document_processor=FakeDocumentProcessor(),
-        embedding_service=FakeEmbeddingService(),
-        vector_store=vector_store,
-        settings=SimpleNamespace(IMAGE_FORMAT="PNG"),
-    )
-
-    pipeline.build("policy.pdf", include_page_images=False)
-
-    metadata = vector_store.upserted_chunks[0]["metadata"]
-    assert "page_image_base64" not in metadata
-    assert "page_image_mime_type" not in metadata
-
-
-def test_qdrant_point_payload_preserves_extra_metadata() -> None:
+def test_qdrant_point_payload_preserves_text_metadata() -> None:
     service = QdrantService.__new__(QdrantService)
     service.sparse_model = FakeSparseModel()
 
     points = service._build_points(
         [
             {
-                "text": "Visual warranty instructions.",
+                "text": "Warranty instructions.",
                 "embedding": [0.1, 0.2, 0.3],
                 "metadata": {
                     "source": "policy.pdf",
                     "page_number": 1,
                     "chunk_index": 0,
-                    "page_image_base64": "data:image/png;base64,abc123",
+                    "category": "warranty",
                 },
             }
         ]
     )
 
-    assert points[0].payload["page_image_base64"] == "data:image/png;base64,abc123"
+    assert points[0].payload["text"] == "Warranty instructions."
+    assert points[0].payload["category"] == "warranty"
+    assert "page_image_url" not in points[0].payload

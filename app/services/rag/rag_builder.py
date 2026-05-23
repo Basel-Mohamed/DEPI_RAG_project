@@ -1,9 +1,9 @@
-import base64
 import logging
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from app.core.config import Settings, settings as global_settings
 
 if TYPE_CHECKING:
     from app.services.embedding.embedding_service import EmbeddingService
@@ -21,7 +21,9 @@ class BuildService:
         document_processor: "DocumentProcessor",
         embedding_service: "EmbeddingService",
         vector_store: "QdrantService",
+        settings: Settings | None = None,
     ) -> None:
+        self.settings = settings or global_settings
         self.document_processor = document_processor
         self.embedding_service = embedding_service
         self.vector_store = vector_store
@@ -30,36 +32,24 @@ class BuildService:
         file_path = Path(file_path)
         normalized_source = source or Path(file_path).name
 
-        logger.info(
-            "build started source=%s file_path=%s",
-            normalized_source,
-            file_path,
-        )
+        logger.info("build started source=%s file_path=%s", normalized_source, file_path)
 
         logger.info("document processing started source=%s", normalized_source)
-        chunks, page_images = self.document_processor.process_document(file_path)
+        chunks = self.document_processor.process_document(file_path)
         logger.info(
-            "document processing completed source=%s chunks_count=%s page_images_count=%s",
+            "document processing completed source=%s chunks_count=%s",
             normalized_source,
             len(chunks),
-            len(page_images),
         )
 
         logger.info("metadata normalization started source=%s", normalized_source)
         build_id = uuid.uuid4().hex
-        chunks_with_page_images_count = 0
         for chunk in chunks:
             metadata = chunk.setdefault("metadata", {})
             metadata["source"] = normalized_source
             metadata["build_id"] = build_id
-            if self._attach_page_image(metadata, page_images):
-                chunks_with_page_images_count += 1
             self._validate_chunk(chunk)
-        logger.info(
-            "metadata normalization completed source=%s chunks_with_page_images_count=%s",
-            normalized_source,
-            chunks_with_page_images_count,
-        )
+        logger.info("metadata normalization completed source=%s", normalized_source)
 
         logger.info("embedding started source=%s chunks_count=%s", normalized_source, len(chunks))
         embedded_chunks = self.embedding_service.embed_chunks(chunks)
@@ -97,8 +87,6 @@ class BuildService:
         result = {
             "source": normalized_source,
             "chunks_count": len(chunks),
-            "page_images_count": len(page_images),
-            "chunks_with_page_images_count": chunks_with_page_images_count,
             "upserted": upsert_result["upserted"],
             "failed": upsert_result["failed"],
         }
@@ -131,32 +119,3 @@ class BuildService:
         for key in ("source", "page_number", "chunk_index", "build_id"):
             if key not in metadata:
                 raise ValueError(f"Document processor returned a chunk without metadata.{key}.")
-
-    def _attach_page_image(
-        self,
-        metadata: dict[str, Any],
-        page_images: dict[int, bytes],
-    ) -> bool:
-        page_number = metadata.get("page_number")
-        if page_number is None:
-            return False
-
-        try:
-            normalized_page_number = int(page_number)
-        except (TypeError, ValueError):
-            return False
-
-        image_bytes = page_images.get(normalized_page_number)
-        if not image_bytes:
-            return False
-
-        image_format = str(
-            getattr(self.document_processor, "image_format", "PNG")
-        ).lower()
-        image_subtype = "jpeg" if image_format == "jpg" else image_format
-        metadata["page_image_mime_type"] = f"image/{image_subtype}"
-        metadata["page_image_base64"] = (
-            f"data:{metadata['page_image_mime_type']};base64,"
-            f"{base64.b64encode(image_bytes).decode('ascii')}"
-        )
-        return True

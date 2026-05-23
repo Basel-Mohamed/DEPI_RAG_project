@@ -7,8 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class InferenceRequest(BaseModel):
     question: str = Field(..., min_length=1)
-    top_k: int | None = Field(default=None, ge=1, le=50)
-    retrieval_top_k: int | None = Field(default=None, ge=1, le=100)
     mode: Literal["dense", "sparse", "hybrid"] | None = None
     source: str | None = Field(
         default=None,
@@ -35,14 +33,6 @@ class ContentBlock(BaseModel):
     text: str | None = None
 
 
-class MediaPayload(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    type: str
-    url: str | None = None
-    source_id: str | None = None
-
-
 class SourcePayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -51,7 +41,6 @@ class SourcePayload(BaseModel):
     title: str
     content: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    media: list[MediaPayload] = Field(default_factory=list)
 
 
 class InferenceResponse(BaseModel):
@@ -62,4 +51,4 @@ class InferenceResponse(BaseModel):
 
 
 class InferenceStreamChunk(InferenceResponse):
-    event: Literal["delta", "sources"] | str
+    event: Literal["delta", "sources", "error"] | str

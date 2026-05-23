@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -14,6 +15,8 @@ from app.services.llm.providers.base_llm import (
     LlmServiceError,
 )
 from app.services.types import RetrievedContext
+
+logger = logging.getLogger(__name__)
 
 
 class CohereLlmService(BaseLlmService):
@@ -63,6 +66,7 @@ class CohereLlmService(BaseLlmService):
                 }
             )
         except Exception as exc:
+            logger.exception("Cohere answer generation failed")
             raise LlmServiceError("Cohere answer generation failed.") from exc
 
         return str(answer).strip() or self.fallback_answer
@@ -91,6 +95,7 @@ class CohereLlmService(BaseLlmService):
             if not yielded:
                 yield self.fallback_answer
         except Exception as exc:
+            logger.exception("Cohere answer streaming failed")
             raise LlmServiceError("Cohere answer streaming failed.") from exc
 
     def _get_llm(self) -> Any:
@@ -104,6 +109,7 @@ class CohereLlmService(BaseLlmService):
         )
         if self.__class__._singleton_llm is not None:
             if self.__class__._singleton_config != config:
+                logger.error("CohereLlmService singleton requested with conflicting configuration")
                 raise LlmServiceError(
                     "CohereLlmService singleton was already initialized with a different configuration."
                 )
@@ -112,11 +118,13 @@ class CohereLlmService(BaseLlmService):
         try:
             from langchain_cohere import ChatCohere
         except ImportError as exc:
+            logger.exception("langchain-cohere is not installed")
             raise LlmServiceError(
                 "The 'langchain-cohere' package is required to use "
                 "CohereLlmService."
             ) from exc
 
+        logger.info("creating Cohere chat client model=%s", self.model_name)
         self.__class__._singleton_llm = ChatCohere(
             cohere_api_key=self.api_key,
             model=self.model_name,

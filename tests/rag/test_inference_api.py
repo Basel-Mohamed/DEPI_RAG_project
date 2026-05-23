@@ -41,6 +41,18 @@ class FakePipeline:
         }
 
 
+class FailingStreamPipeline(FakePipeline):
+    def stream(self, question: str, **kwargs: Any):
+        yield {
+            "event": "delta",
+            "answer": "Partial",
+            "content": [{"type": "text", "text": "Partial"}],
+            "sources": [],
+            "retrieval": {},
+        }
+        raise RuntimeError("provider failed")
+
+
 def test_controller_ask_passes_normalized_request_to_pipeline() -> None:
     fake_pipeline = FakePipeline()
     controller = InferenceController(fake_pipeline)
@@ -52,8 +64,6 @@ def test_controller_ask_passes_normalized_request_to_pipeline() -> None:
     assert response["answer"] == "Refunds are available within 30 days."
     assert fake_pipeline.last_run == {
         "question": "How do refunds work?",
-        "top_k": None,
-        "retrieval_top_k": None,
         "mode": None,
         "filter_field": "source",
         "filter_value": "policy.pdf",
@@ -70,6 +80,27 @@ def test_controller_stream_returns_ndjson_chunks() -> None:
     assert len(lines) == 2
     assert json.loads(lines[0])["event"] == "delta"
     assert json.loads(lines[1])["event"] == "sources"
+
+
+def test_controller_stream_returns_error_chunk_on_iteration_failure() -> None:
+    controller = InferenceController(FailingStreamPipeline())
+
+    lines = list(controller.stream(InferenceRequest(question="How do refunds work?")))
+
+    assert json.loads(lines[0])["event"] == "delta"
+    error = json.loads(lines[1])
+    assert error == {
+        "event": "error",
+        "answer": "",
+        "content": [
+            {
+                "type": "text",
+                "text": "Inference failed. Check server logs for the request id.",
+            }
+        ],
+        "sources": [],
+        "retrieval": {},
+    }
 
 
 def test_controller_rejects_blank_question_after_stripping() -> None:

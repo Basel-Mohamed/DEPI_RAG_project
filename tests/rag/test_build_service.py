@@ -7,21 +7,13 @@ from app.services.rag.rag_builder import BuildService
 
 
 class FakeDocumentProcessor:
-    image_format = "PNG"
-
-    def process_document(
-        self,
-        file_path: str | Path,
-    ) -> tuple[list[dict[str, Any]], dict[int, bytes]]:
-        return (
-            [
-                {
-                    "text": "The training schedule contains weekly sessions.",
-                    "metadata": {"source": str(file_path), "page_number": 1, "chunk_index": 0},
-                }
-            ],
-            {1: b"page-image-bytes"},
-        )
+    def process_document(self, file_path: str | Path) -> list[dict[str, Any]]:
+        return [
+            {
+                "text": "The training schedule contains weekly sessions.",
+                "metadata": {"source": str(file_path), "page_number": 1, "chunk_index": 0},
+            }
+        ]
 
 
 class FakeEmbeddingService:
@@ -46,7 +38,7 @@ class FakeVectorStore:
         return {"deleted_count": 0}
 
 
-def test_build_service_attaches_page_images_to_chunk_metadata(tmp_path: Path) -> None:
+def test_build_service_indexes_text_chunks_only(tmp_path: Path) -> None:
     document_path = tmp_path / "training.pdf"
     document_path.write_bytes(b"%PDF-1.4 fake pdf bytes")
     vector_store = FakeVectorStore()
@@ -59,8 +51,12 @@ def test_build_service_attaches_page_images_to_chunk_metadata(tmp_path: Path) ->
     result = service.build_document(document_path, source="file-123")
 
     metadata = vector_store.upserted_chunks[0]["metadata"]
-    assert result["page_images_count"] == 1
-    assert result["chunks_with_page_images_count"] == 1
+    assert result == {
+        "source": "file-123",
+        "chunks_count": 1,
+        "upserted": 1,
+        "failed": 0,
+    }
     assert metadata["source"] == "file-123"
-    assert metadata["page_image_mime_type"] == "image/png"
-    assert metadata["page_image_base64"].startswith("data:image/png;base64,")
+    assert metadata["page_number"] == 1
+    assert "page_image_url" not in metadata

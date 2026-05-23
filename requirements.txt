@@ -1,4 +1,6 @@
 langchain
+langchain-cohere
+langchain-openai
 langchain-docling
 langchain_text_splitters
 pydantic
@@ -12,3 +14,5 @@ docling
 pytest
 fastembed
 qdrant_client
+mlflow
+minio

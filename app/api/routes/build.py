@@ -1,8 +1,9 @@
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 
 from app.core.dependencies import get_build_service
+from app.core.security import require_api_key
 from app.controllers.build_controller import BuildController
 from app.schemas.build import (
     FileBuildResponse,
@@ -12,7 +13,7 @@ from app.schemas.build import (
 )
 from app.services.rag.rag_builder import BuildService
 
-router = APIRouter(tags=["build"])
+router = APIRouter(tags=["build"], dependencies=[Depends(require_api_key)])
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +23,10 @@ def get_build_controller(
     return BuildController(build_service)
 
 
+def get_upload_controller() -> BuildController:
+    return BuildController()
+
+
 @router.post(
     "/files",
     response_model=UploadedFileResponse,
@@ -29,7 +34,7 @@ def get_build_controller(
 )
 async def upload_file(
     file: UploadFile = File(...),
-    controller: BuildController = Depends(get_build_controller),
+    controller: BuildController = Depends(get_upload_controller),
 ) -> dict:
     logger.info("file upload endpoint received filename=%s", file.filename)
     try:
@@ -46,12 +51,13 @@ async def upload_file(
 
 @router.post("/files/build", response_model=FileBuildResponse)
 def build_files(
+    background_tasks: BackgroundTasks,
     file_id: str | None = None,
     controller: BuildController = Depends(get_build_controller),
 ) -> dict:
     logger.info("file build endpoint received file_id=%s", file_id)
     try:
-        return controller.build_files(file_id=file_id)
+        return controller.build_files(file_id=file_id, background_tasks=background_tasks)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception:

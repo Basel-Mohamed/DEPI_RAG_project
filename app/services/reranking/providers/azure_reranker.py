@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import json
 from typing import Any
 
 from app.services.reranking.base_reranker import BaseRerankerService, RerankerServiceError
+
+logger = logging.getLogger(__name__)
 
 
 class _AzureCohereRerankerAdapter:
@@ -24,6 +27,7 @@ class _AzureCohereRerankerAdapter:
         try:
             import httpx
         except ImportError as exc:
+            logger.exception("httpx is not installed")
             raise RerankerServiceError(
                 "The 'httpx' package is required to use AzureCohereRerankerService."
             ) from exc
@@ -44,12 +48,18 @@ class _AzureCohereRerankerAdapter:
             timeout=30.0,
         )
         if response.status_code >= 400:
+            logger.error(
+                "Azure Cohere rerank request failed status_code=%s response=%s",
+                response.status_code,
+                response.text,
+            )
             raise RerankerServiceError(
                 f"Azure Cohere rerank request failed with status {response.status_code}: {response.text}"
             )
         try:
             payload = response.json()
         except json.JSONDecodeError as exc:
+            logger.exception("Azure Cohere rerank returned non-JSON response")
             raise RerankerServiceError(
                 f"Azure Cohere rerank returned a non-JSON response: {response.text}"
             ) from exc
@@ -110,6 +120,7 @@ class AzureCohereRerankerService(BaseRerankerService):
                 )
             return self.__class__._singleton_reranker
 
+        logger.info("creating Azure Cohere reranker client model=%s", self.model_name)
         self.__class__._singleton_reranker = _AzureCohereRerankerAdapter(
             api_key=self.api_key,
             base_url=self.base_url,

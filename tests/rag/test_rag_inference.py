@@ -3,7 +3,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from app.services.media import MediaExtractor
 from app.services.rag.inference_helpers.response import RagResponseBuilder
 from app.services.rag.rag_inference import RagInferencePipeline
 from app.services.types import RetrievedContext
@@ -31,34 +30,15 @@ class FakeVectorStore:
         ]
 
 
-class FakeVisualVectorStore:
+class RecordingVectorStore(FakeVectorStore):
     def __init__(self) -> None:
+        self.last_top_k: int | None = None
         self.last_score_threshold: float | None = None
 
     def search(self, **kwargs: Any) -> list[dict[str, Any]]:
+        self.last_top_k = kwargs.get("top_k")
         self.last_score_threshold = kwargs.get("score_threshold")
-        return [
-            {
-                "id": "docx-image-placeholder",
-                "text": "## 2 جدول التدريب <!-- image -->",
-                "score": 1.0,
-                "metadata": {
-                    "source": "depi_test.docx",
-                    "page_number": 1,
-                },
-            },
-            {
-                "id": "pdf-page-image",
-                "text": "جدول التدريب",
-                "score": 0.3333,
-                "metadata": {
-                    "source": "depi_test.pdf",
-                    "page_number": 3,
-                    "page_image_base64": "data:image/png;base64,schedule",
-                    "page_image_mime_type": "image/png",
-                },
-            },
-        ]
+        return super().search(**kwargs)
 
 
 class FakeLlmService:
@@ -98,14 +78,14 @@ class FakeReranker:
 
 def _settings() -> SimpleNamespace:
     return SimpleNamespace(
-        RAG_TOP_K=2,
-        RAG_RETRIEVAL_TOP_K=4,
+        RERANKED_CONTEXT_TOP_K=2,
+        RETRIEVAL_CANDIDATE_TOP_K=4,
         RETRIEVAL_MODE="hybrid",
         reranker_provider=None,
     )
 
 
-def test_run_normalizes_llm_text_and_source_media() -> None:
+def test_run_normalizes_llm_text_and_text_sources() -> None:
     pipeline = RagInferencePipeline(
         vector_store=FakeVectorStore(),
         llm_service=FakeLlmService(),
@@ -119,16 +99,11 @@ def test_run_normalizes_llm_text_and_source_media() -> None:
         "type": "text",
         "text": "Refunds are available within 30 days.",
     }
-    assert response["sources"][0]["media"] == [
-        {
-            "type": "image",
-            "url": "https://example.test/refund-flow.png",
-            "source_id": "chunk-1",
-        }
-    ]
+    assert "media" not in response["sources"][0]
+    assert "image_url" not in response["sources"][0]["metadata"]
 
 
-def test_run_applies_optional_reranker_scores() -> None:
+def test_run_uses_settings_for_rerank_top_k() -> None:
     pipeline = RagInferencePipeline(
         vector_store=FakeVectorStore(),
         llm_service=FakeLlmService(),
@@ -136,28 +111,43 @@ def test_run_applies_optional_reranker_scores() -> None:
         settings=_settings(),
     )
 
-    response = pipeline.run("How do refunds work?", top_k=1)
+    response = pipeline.run("How do refunds work?")
 
     assert response["sources"][0]["id"] == "chunk-2"
     assert response["sources"][0]["metadata"]["rerank_score"] == 0.97
-    assert response["retrieval"]["documents"] == 1
+    assert response["retrieval"]["documents"] == 2
 
 
-def test_visual_questions_keep_retrieved_image_context() -> None:
-    vector_store = FakeVisualVectorStore()
+def test_retrieve_uses_settings_for_retrieval_top_k() -> None:
+    vector_store = RecordingVectorStore()
+    settings = SimpleNamespace(
+        RERANKED_CONTEXT_TOP_K=2,
+        RETRIEVAL_CANDIDATE_TOP_K=7,
+        RETRIEVAL_MODE="hybrid",
+        reranker_provider=None,
+    )
+    pipeline = RagInferencePipeline(
+        vector_store=vector_store,
+        llm_service=FakeLlmService(),
+        settings=settings,
+    )
+
+    pipeline.retrieve("How do refunds work?")
+
+    assert vector_store.last_top_k == 7
+
+
+def test_visual_words_do_not_change_text_retrieval_threshold() -> None:
+    vector_store = RecordingVectorStore()
     pipeline = RagInferencePipeline(
         vector_store=vector_store,
         llm_service=FakeLlmService(),
         settings=_settings(),
     )
 
-    response = pipeline.run(
-        "In the schedule image, what color is the far-right End column?"
-    )
+    pipeline.run("In the schedule image, what text appears in the End column?")
 
-    assert vector_store.last_score_threshold == 0.0
-    assert any(source["media"] for source in response["sources"])
-    assert response["sources"][-1]["id"] == "pdf-page-image"
+    assert vector_store.last_score_threshold is None
 
 
 def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:
@@ -169,22 +159,30 @@ def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:
     assert response["content"] == [{"type": "text", "text": ""}]
 
 
-def test_media_extractor_ignores_invalid_media_dictionaries() -> None:
-    media_extractor = MediaExtractor()
+def test_response_metadata_redacts_non_text_fields() -> None:
+    builder = RagResponseBuilder()
 
-    media = media_extractor.extract(
-        {
-            "media": {"foo": "bar"},
-            "attachments": [{"type": "image"}],
-            "image": {"url": "https://example.test/valid.png"},
-        },
-        source_id="chunk-1",
+    sources = builder.build_sources(
+        [
+            RetrievedContext(
+                id="chunk-1",
+                title="Policy p.1",
+                content="Text",
+                metadata={
+                    "source": "policy.pdf",
+                    "page_image_path": "uploads/page_images/file-123/1.png",
+                    "page_image_url": "/media/page-images/file-123/1.png",
+                    "page_image_mime_type": "image/png",
+                    "attachment": "receipt.png",
+                },
+            )
+        ]
     )
 
-    assert media == [
-        {
-            "type": "image",
-            "url": "https://example.test/valid.png",
-            "source_id": "chunk-1",
-        }
-    ]
+    assert sources[0] == {
+        "rank": 1,
+        "id": "chunk-1",
+        "title": "Policy p.1",
+        "content": "Text",
+        "metadata": {"source": "policy.pdf"},
+    }

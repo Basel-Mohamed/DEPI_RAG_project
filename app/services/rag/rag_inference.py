@@ -9,7 +9,6 @@ from app.services.llm.providers.base_llm import (
     DEFAULT_FALLBACK_ANSWER,
     BaseLlmService,
 )
-from app.services.media import MediaExtractor
 from app.services.rag.inference_helpers.response import RagResponseBuilder
 from app.services.rag.inference_helpers.retrieval import RetrievalPolicy
 from app.services.types import RetrievedContext
@@ -27,9 +26,8 @@ class RagInferencePipeline:
     """Orchestrate retrieval, optional reranking, and LLM generation.
 
     The heavy formatting details live in helper classes:
-    ``RetrievalPolicy`` handles result conversion and visual-context rules,
-    ``RagResponseBuilder`` handles source payloads and LLM output normalization,
-    and ``MediaExtractor`` handles image/media metadata.
+    ``RetrievalPolicy`` handles result conversion, and ``RagResponseBuilder``
+    handles source payloads and LLM output normalization.
     """
 
     def __init__(
@@ -61,7 +59,6 @@ class RagInferencePipeline:
 
             llm_service = create_llm_service(self.settings)
 
-        media_extractor = MediaExtractor()
         self.vector_store = vector_store
         self.llm_service = llm_service
         if reranker is None:
@@ -70,17 +67,13 @@ class RagInferencePipeline:
             reranker = create_reranker_service(self.settings)
 
         self.reranker = reranker
-        self.retrieval_policy = retrieval_policy or RetrievalPolicy(media_extractor)
-        self.response_builder = response_builder or RagResponseBuilder(
-            media_extractor=media_extractor
-        )
+        self.retrieval_policy = retrieval_policy or RetrievalPolicy()
+        self.response_builder = response_builder or RagResponseBuilder()
 
     def run(
         self,
         question: str,
         *,
-        top_k: int | None = None,
-        retrieval_top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -95,8 +88,6 @@ class RagInferencePipeline:
 
         documents = self.retrieve(
             clean_question,
-            top_k=top_k,
-            retrieval_top_k=retrieval_top_k,
             mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,
@@ -118,8 +109,6 @@ class RagInferencePipeline:
         self,
         question: str,
         *,
-        top_k: int | None = None,
-        retrieval_top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -131,9 +120,9 @@ class RagInferencePipeline:
         if not clean_question:
             return []
 
-        final_top_k = top_k or int(getattr(self.settings, "RAG_TOP_K", 5))
-        search_top_k = retrieval_top_k or int(
-            getattr(self.settings, "RAG_RETRIEVAL_TOP_K", max(final_top_k, 10))
+        final_top_k = int(getattr(self.settings, "RERANKED_CONTEXT_TOP_K", 5))
+        search_top_k = int(
+            getattr(self.settings, "RETRIEVAL_CANDIDATE_TOP_K", max(final_top_k, 10))
         )
         search_top_k = max(search_top_k, final_top_k)
 
@@ -159,20 +148,12 @@ class RagInferencePipeline:
             top_k=final_top_k,
         )
 
-        if self.retrieval_policy.is_visual_question(clean_question):
-            return self.retrieval_policy.ensure_visual_context(
-                ranked_documents,
-                retrieved_documents,
-                top_k=final_top_k,
-            )
         return ranked_documents
 
     def stream(
         self,
         question: str,
         *,
-        top_k: int | None = None,
-        retrieval_top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -188,8 +169,6 @@ class RagInferencePipeline:
 
         documents = self.retrieve(
             clean_question,
-            top_k=top_k,
-            retrieval_top_k=retrieval_top_k,
             mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,

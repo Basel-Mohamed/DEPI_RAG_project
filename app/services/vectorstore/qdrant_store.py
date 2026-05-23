@@ -81,18 +81,20 @@ class QdrantService:
     def _connect(self) -> QdrantClient:
         try:
             if self.settings.QDRANT_REMOTE:
+                scheme = "https" if self.settings.QDRANT_HTTPS else "http"
+                url = f"{scheme}://{self.settings.QDRANT_HOST}:{self.settings.QDRANT_PORT}"
                 client = QdrantClient(
-                    host=self.settings.QDRANT_HOST,
-                    port=self.settings.QDRANT_PORT,
+                    url=url,
+                    api_key=self.settings.QDRANT_API_KEY,
                     prefer_grpc=self.settings.QDRANT_PREFER_GRPC,
                 )
-                logger.info("Connected to remote Qdrant at %s:%s", self.settings.QDRANT_HOST, self.settings.QDRANT_PORT)
+                logger.info("Connected to remote Qdrant at %s", url)
             else:
                 client = QdrantClient(path=self.settings.QDRANT_PATH)
                 logger.info("Connected to local Qdrant at %s", self.settings.QDRANT_PATH)
             return client
-        except Exception as e:
-            logger.error("Failed to connect to Qdrant: %s", e)
+        except Exception:
+            logger.exception("Failed to connect to Qdrant")
             raise
 
     def _ensure_collection(self) -> None:
@@ -175,8 +177,8 @@ class QdrantService:
                 points=points,
                 wait=True,
             )
-        except Exception as e:
-            logger.error("Upsert failed, attempting rollback: %s", e)
+        except Exception:
+            logger.exception("Upsert failed, attempting rollback")
             self._rollback(point_ids, build_id=rollback_build_id)
             raise
 
@@ -336,7 +338,7 @@ class QdrantService:
             if filter_field
             else None
         )
-        score_threshold = score_threshold if score_threshold is not None else self.settings.SCORE_THRESHOLD
+        score_threshold = self._effective_score_threshold(mode, score_threshold)
 
         if mode == SearchMode.DENSE:
             results = self._search_dense(query, top_k, query_filter, score_threshold)
@@ -349,6 +351,18 @@ class QdrantService:
             "Search [%s] for '%s...' → %d results.", mode, query[:40], len(results)
         )
         return results
+
+    def _effective_score_threshold(
+        self,
+        mode: SearchMode,
+        score_threshold: float | None,
+    ) -> float | None:
+        """Resolve request/default threshold for the selected search mode."""
+        if score_threshold is not None:
+            return score_threshold
+        if mode == SearchMode.HYBRID:
+            return None
+        return self.settings.SCORE_THRESHOLD
 
     def _search_dense(
         self,
@@ -446,7 +460,7 @@ class QdrantService:
                 ],
             }
         except Exception as e:
-            logger.error("Health check failed: %s", e)
+            logger.exception("Health check failed")
             return {"healthy": False, "error": str(e)}
 
     def collection_info(self) -> dict:
@@ -554,8 +568,8 @@ class QdrantService:
                 wait=True,
             )
             logger.warning("Rollback successful: deleted %d points.", len(ids_to_delete))
-        except Exception as e:
-            logger.error("Rollback failed: %s — manual cleanup may be needed.", e)
+        except Exception:
+            logger.exception("Rollback failed; manual cleanup may be needed.")
 
     @staticmethod
     def _to_uuid(key: str) -> str:
