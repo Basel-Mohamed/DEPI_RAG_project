@@ -1,74 +1,107 @@
-from functools import lru_cache
-from typing import Any
-
-from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="DEPI RAG Backend", alias="APP_NAME")
-    app_env: str = Field(default="development", alias="APP_ENV")
-    app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
-    app_port: int = Field(default=8000, alias="APP_PORT")
-    api_v1_prefix: str = Field(default="/api/v1", alias="API_V1_PREFIX")
-    cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"],
-        alias="CORS_ORIGINS",
-    )
-    vector_store_provider: str = Field(
-        default="inmemory",
-        alias="VECTOR_STORE_PROVIDER",
-    )
-    llm_provider: str = Field(default="", alias="LLM_PROVIDER")
-    embedding_provider: str = Field(default="stub", alias="EMBEDDING_PROVIDER")
-    reranker_provider: str = Field(default="", alias="RERANKER_PROVIDER")
-    llm_temperature: float = Field(default=0.2, alias="LLM_TEMPERATURE")
-    llm_max_tokens: int = Field(default=400, alias="LLM_MAX_TOKENS")
-    reranker_top_n: int | None = Field(default=None, alias="RERANKER_TOP_N")
-    azure_openai_endpoint: str = Field(default="", alias="AZURE_OPENAI_ENDPOINT")
-    azure_openai_api_key: str = Field(default="", alias="AZURE_OPENAI_API_KEY")
-    azure_openai_chat_deployment: str = Field(
-        default="",
-        alias="AZURE_OPENAI_CHAT_DEPLOYMENT",
-    )
-    azure_openai_api_version: str = Field(
-        default="2024-02-01",
-        alias="AZURE_OPENAI_API_VERSION",
-    )
-    cohere_api_key: str = Field(default="", alias="COHERE_API_KEY")
-    cohere_chat_model: str = Field(default="command-r-plus", alias="COHERE_CHAT_MODEL")
-    cohere_rerank_model: str = Field(default="rerank-v3.5", alias="COHERE_RERANK_MODEL")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    APP_NAME: str = "rag_app"
+    APP_VERSION: str = "0.1.0"
+    LOG_LEVEL: str = "INFO"
+    API_KEY: str | None = None
+    
+    # ------------------------------------------------------------------
+    # Chunking
+    # ------------------------------------------------------------------
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, value: Any) -> list[str]:
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        if isinstance(value, list):
-            return value
-        return []
+    # ------------------------------------------------------------------
+    # Embedding
+    # ------------------------------------------------------------------
+    EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large"
+    SPARSE_MODEL: str = "Qdrant/bm25"           # BM25 sparse model via fastembed
 
-    @field_validator(
-        "vector_store_provider",
-        "llm_provider",
-        "embedding_provider",
-        "reranker_provider",
-        mode="before",
-    )
-    @classmethod
-    def normalize_provider_names(cls, value: Any) -> str:
-        if isinstance(value, str):
-            return value.strip().lower()
-        return str(value).strip().lower()
+    # ------------------------------------------------------------------
+    # Qdrant connection
+    # ------------------------------------------------------------------
+    QDRANT_REMOTE: bool = False                 # True → remote, False → local file
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_PREFER_GRPC: bool = False
+    QDRANT_PATH: str = "./qdrant_storage"       # used only when QDRANT_REMOTE=False
+
+    # ------------------------------------------------------------------
+    # Collection
+    # ------------------------------------------------------------------
+    COLLECTION_NAME: str = "documents"
+    SCORE_THRESHOLD: float = 0.6
+    DENSE_VECTOR_SIZE: int = 1024               # multilingual-e5-large output dim
+    DENSE_ON_DISK: bool = False
+    SPARSE_ON_DISK: bool = False
+
+    # Search mode: "dense" | "sparse" | "hybrid"
+    RETRIEVAL_MODE: str = "hybrid"
+
+    # ------------------------------------------------------------------
+    # HNSW index
+    # ------------------------------------------------------------------
+    HNSW_M: int = 16
+    HNSW_EF_CONSTRUCT: int = 100
+    HNSW_FULL_SCAN_THRESHOLD: int = 10_000
+    HNSW_ON_DISK: bool = False
+
+    # ------------------------------------------------------------------
+    # Optimizers
+    # ------------------------------------------------------------------
+    OPTIMIZATION_INDEXING_THRESHOLD: int = 20_000
+    OPTIMIZATION_MEMMAP_THRESHOLD: int = 50_000
+
+    # ------------------------------------------------------------------
+    # Scalar quantization (INT8)
+    # ------------------------------------------------------------------
+    QUANTIZATION_QUANTILE: float = 0.99
+    QUANTIZATION_ALWAYS_RAM: bool = True
+
+    # ------------------------------------------------------------------
+    # RAG inference
+    # ------------------------------------------------------------------
+    RAG_RETRIEVAL_TOP_K: int = 10
+    RAG_RERANK_TOP_K: int = 5
+
+    # ------------------------------------------------------------------
+    # Metadata and artifact storage
+    # ------------------------------------------------------------------
+    METADATA_BACKEND: str = "sqlite"  # "json", "sqlite", or "azure_sql"
+    METADATA_DB_PATH: str = "uploads/app_metadata.sqlite3"
+    AZURE_SQL_CONNECTION_STRING: str | None = None
+    ARTIFACT_STORAGE_BACKEND: str = "local"  # "local" or "azure_blob"
+    AZURE_STORAGE_CONNECTION_STRING: str | None = None
+    AZURE_BLOB_CONTAINER: str = "rag-artifacts"
+
+    # ------------------------------------------------------------------
+    # LLM
+    # ------------------------------------------------------------------
+    llm_provider: str = "cohere"
+    llm_temperature: float = 0.2
+    llm_max_tokens: int = 400
+
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_key: str | None = None
+    azure_openai_chat_deployment: str | None = None
+    azure_openai_api_version: str = "2024-02-01"
+
+    cohere_api_key: str | None = None
+    cohere_chat_model: str = "command-a-03-2025"
+
+    # ------------------------------------------------------------------
+    # Optional reranking
+    # ------------------------------------------------------------------
+    reranker_provider: str | None = None
+    cohere_rerank_model: str = "rerank-v3.5"
+    azure_cohere_base_url: str | None = None
+    azure_cohere_api_key: str | None = None
+    azure_cohere_model: str = "model"
 
 
-@lru_cache
-def get_settings() -> Settings:
-    return Settings()
+settings = Settings()
+

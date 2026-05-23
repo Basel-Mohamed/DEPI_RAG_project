@@ -10,9 +10,3 @@ class RetrievedContext:
     title: str
     content: str
     metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
-class RankedDocument:
-    document: RetrievedContext
-    score: float

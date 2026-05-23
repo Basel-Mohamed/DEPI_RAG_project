@@ -1,0 +1,10 @@
+.git
+.pytest_cache
+__pycache__
+*.py[cod]
+venv
+python_modules
+logs
+qdrant_storage
+.qdrant
+.env_mine

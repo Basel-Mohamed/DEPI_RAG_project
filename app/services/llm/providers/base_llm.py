@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from typing import Any
 
 from app.services.types import RetrievedContext
 
@@ -39,8 +38,3 @@ class BaseLlmService(ABC):
         """Yield answer chunks incrementally for streaming clients."""
 
         raise NotImplementedError
-
-    def generate_answer(self, question: str, documents: list[RetrievedContext]) -> str:
-        """Backward-compatible alias used by the current RAG service."""
-
-        return self.generate(question=question, documents=documents)

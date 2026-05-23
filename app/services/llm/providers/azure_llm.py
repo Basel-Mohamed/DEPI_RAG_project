@@ -44,7 +44,7 @@ class AzureLlmService(BaseLlmService):
 
     def build_context(self, documents: list[RetrievedContext]) -> str:
         return build_context_text(
-            documents,
+            self._text_only_documents(documents),
             include_metadata=True,
         )
 
@@ -103,6 +103,49 @@ class AzureLlmService(BaseLlmService):
             raise LlmServiceError(
                 "Azure OpenAI answer streaming failed."
             ) from exc
+
+    def _text_only_documents(
+        self,
+        documents: list[RetrievedContext],
+    ) -> list[RetrievedContext]:
+        cleaned_documents: list[RetrievedContext] = []
+        for document in documents:
+            cleaned_documents.append(
+                RetrievedContext(
+                    id=document.id,
+                    title=document.title,
+                    content=document.content,
+                    metadata={
+                        key: value
+                        for key, value in document.metadata.items()
+                        if key in {"source", "url"}
+                    },
+                )
+            )
+        return cleaned_documents
+
+
+    @staticmethod
+    def _extract_text(response: Any, *, strip: bool = True) -> str:
+        content = getattr(response, "content", response)
+
+        if isinstance(content, str):
+            return content.strip() if strip else content
+
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    text_parts.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if text:
+                        text_parts.append(str(text))
+            text = "".join(text_parts)
+            return text.strip() if strip else text
+
+        text = str(content)
+        return text.strip() if strip else text
 
     def _get_llm(self) -> Any:
         config = (
