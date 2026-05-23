@@ -17,18 +17,12 @@ class InferenceController:
 
     def ask(self, request: InferenceRequest) -> dict[str, Any]:
         question = self._clean_question(request.question)
-        filter_field, filter_value = self._filter_params(request)
 
-        logger.info(
-            "inference started mode=%s filter_field=%s",
-            request.mode,
-            filter_field,
-        )
+        logger.info("inference started mode=%s", request.mode)
         response = self.pipeline.run(
             question,
+            top_k=request.top_k,
             mode=request.mode,
-            filter_field=filter_field,
-            filter_value=filter_value,
             score_threshold=request.score_threshold,
             include_sources=request.include_sources,
         )
@@ -40,18 +34,11 @@ class InferenceController:
 
     def stream(self, request: InferenceRequest) -> Iterator[str]:
         question = self._clean_question(request.question)
-        filter_field, filter_value = self._filter_params(request)
 
-        logger.info(
-            "inference stream started mode=%s filter_field=%s",
-            request.mode,
-            filter_field,
-        )
+        logger.info("inference stream started mode=%s", request.mode)
         return self._stream_chunks(
             request,
             question=question,
-            filter_field=filter_field,
-            filter_value=filter_value,
         )
 
     def _stream_chunks(
@@ -59,15 +46,12 @@ class InferenceController:
         request: InferenceRequest,
         *,
         question: str,
-        filter_field: str | None,
-        filter_value: Any,
     ) -> Iterator[str]:
         try:
             for chunk in self.pipeline.stream(
                 question,
+                top_k=request.top_k,
                 mode=request.mode,
-                filter_field=filter_field,
-                filter_value=filter_value,
                 score_threshold=request.score_threshold,
                 include_sources=request.include_sources,
             ):
@@ -81,9 +65,3 @@ class InferenceController:
         if not cleaned:
             raise ValueError("Question is required.")
         return cleaned
-
-    @staticmethod
-    def _filter_params(request: InferenceRequest) -> tuple[str | None, Any]:
-        if request.source:
-            return "source", request.source
-        return request.filter_field, request.filter_value

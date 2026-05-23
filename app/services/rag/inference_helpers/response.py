@@ -35,7 +35,7 @@ class RagResponseBuilder:
     def build_delta(self, raw_chunk: Any) -> GeneratedPayload:
         """Normalize one streamed LLM chunk."""
 
-        answer = str(raw_chunk).strip()
+        answer = str(raw_chunk)
         return {
             "event": "delta",
             "answer": answer,

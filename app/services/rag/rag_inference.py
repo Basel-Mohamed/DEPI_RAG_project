@@ -10,7 +10,7 @@ from app.services.llm.providers.base_llm import (
     BaseLlmService,
 )
 from app.services.rag.inference_helpers.response import RagResponseBuilder
-from app.services.rag.inference_helpers.retrieval import RetrievalPolicy
+from app.services.rag.inference_helpers.retrieval import result_to_context
 from app.services.types import RetrievedContext
 
 if TYPE_CHECKING:
@@ -25,34 +25,22 @@ GeneratedPayload = dict[str, Any]
 class RagInferencePipeline:
     """Orchestrate retrieval, optional reranking, and LLM generation.
 
-    The heavy formatting details live in helper classes:
-    ``RetrievalPolicy`` handles result conversion and text-context rules, and
-    ``RagResponseBuilder`` handles source payloads and LLM output normalization.
+    The heavy formatting details live in ``RagResponseBuilder`` so the pipeline
+    can focus on orchestration.
     """
 
     def __init__(
         self,
         *,
-        vector_store: QdrantService | None = None,
+        vector_store: QdrantService,
         llm_service: BaseLlmService | None = None,
         reranker: BaseRerankerService | None = None,
         settings: Settings | None = None,
-        retrieval_policy: RetrievalPolicy | None = None,
         response_builder: RagResponseBuilder | None = None,
     ) -> None:
-        """Create the pipeline and lazily construct missing dependencies."""
+        """Create the pipeline from injected infrastructure dependencies."""
 
         self.settings = settings or global_settings
-
-        if vector_store is None:
-            from app.services.embedding.embedding_service import EmbeddingService
-            from app.services.vectorstore.qdrant_store import QdrantService
-
-            embedding_service = EmbeddingService(settings=self.settings)
-            vector_store = QdrantService(
-                embedding_service=embedding_service,
-                settings=self.settings,
-            )
 
         if llm_service is None:
             from app.services.llm.llm_factory import create_llm_service
@@ -67,13 +55,13 @@ class RagInferencePipeline:
             reranker = create_reranker_service(self.settings)
 
         self.reranker = reranker
-        self.retrieval_policy = retrieval_policy or RetrievalPolicy()
         self.response_builder = response_builder or RagResponseBuilder()
 
     def run(
         self,
         question: str,
         *,
+        top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -88,6 +76,7 @@ class RagInferencePipeline:
 
         documents = self.retrieve(
             clean_question,
+            top_k=top_k,
             mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,
@@ -109,6 +98,7 @@ class RagInferencePipeline:
         self,
         question: str,
         *,
+        top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -120,7 +110,7 @@ class RagInferencePipeline:
         if not clean_question:
             return []
 
-        final_top_k = int(self.settings.RAG_RERANK_TOP_K)
+        final_top_k = int(top_k or self.settings.RAG_RERANK_TOP_K)
         search_top_k = int(self.settings.RAG_RETRIEVAL_TOP_K)
 
         raw_results = self.vector_store.search(
@@ -129,16 +119,10 @@ class RagInferencePipeline:
             mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,
-            score_threshold=self.retrieval_policy.effective_score_threshold(
-                clean_question,
-                score_threshold,
-            ),
+            score_threshold=score_threshold,
         )
 
-        retrieved_documents = [
-            self.retrieval_policy.result_to_context(result)
-            for result in raw_results
-        ]
+        retrieved_documents = [result_to_context(result) for result in raw_results]
         ranked_documents = self._rerank(
             clean_question,
             retrieved_documents,
@@ -151,6 +135,7 @@ class RagInferencePipeline:
         self,
         question: str,
         *,
+        top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -166,6 +151,7 @@ class RagInferencePipeline:
 
         documents = self.retrieve(
             clean_question,
+            top_k=top_k,
             mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,

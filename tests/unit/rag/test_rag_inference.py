@@ -102,6 +102,19 @@ def test_run_applies_optional_reranker_scores() -> None:
     assert response["retrieval"]["documents"] == 2
 
 
+def test_run_uses_top_k_as_final_context_limit() -> None:
+    pipeline = RagInferencePipeline(
+        vector_store=FakeVectorStore(),
+        llm_service=FakeLlmService(),
+        settings=_settings(),
+    )
+
+    response = pipeline.run("How do refunds work?", top_k=1)
+
+    assert response["retrieval"]["documents"] == 1
+    assert len(response["sources"]) == 1
+
+
 def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:
     response_builder = RagResponseBuilder()
 
@@ -109,3 +122,12 @@ def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:
 
     assert response["answer"] == ""
     assert response["content"] == [{"type": "text", "text": ""}]
+
+
+def test_stream_delta_preserves_leading_space() -> None:
+    response_builder = RagResponseBuilder()
+
+    response = response_builder.build_delta(" within 30 days.")
+
+    assert response["answer"] == " within 30 days."
+    assert response["content"] == [{"type": "text", "text": " within 30 days."}]

@@ -45,19 +45,26 @@ def test_controller_ask_passes_normalized_request_to_pipeline() -> None:
     fake_pipeline = FakePipeline()
     controller = InferenceController(fake_pipeline)
 
-    response = controller.ask(
-        InferenceRequest(question=" How do refunds work? ", source="policy.pdf")
-    )
+    response = controller.ask(InferenceRequest(question=" How do refunds work? "))
 
     assert response["answer"] == "Refunds are available within 30 days."
     assert fake_pipeline.last_run == {
         "question": "How do refunds work?",
+        "top_k": None,
         "mode": None,
-        "filter_field": "source",
-        "filter_value": "policy.pdf",
         "score_threshold": None,
         "include_sources": True,
     }
+
+
+def test_controller_ask_passes_top_k_to_pipeline() -> None:
+    fake_pipeline = FakePipeline()
+    controller = InferenceController(fake_pipeline)
+
+    controller.ask(InferenceRequest(question="How do refunds work?", top_k=2))
+
+    assert fake_pipeline.last_run is not None
+    assert fake_pipeline.last_run["top_k"] == 2
 
 
 def test_controller_stream_returns_ndjson_chunks() -> None:
@@ -75,3 +82,12 @@ def test_controller_rejects_blank_question_after_stripping() -> None:
 
     with pytest.raises(ValueError, match="Question is required"):
         controller.ask(InferenceRequest(question="   "))
+
+
+def test_inference_request_schema_hides_generic_filters() -> None:
+    properties = InferenceRequest.model_json_schema()["properties"]
+
+    assert "source" not in properties
+    assert "top_k" in properties
+    assert "filter_field" not in properties
+    assert "filter_value" not in properties
