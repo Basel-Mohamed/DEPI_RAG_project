@@ -17,7 +17,7 @@ def embedding_service() -> EmbeddingService:
 @pytest.fixture
 def sample_chunks() -> list[dict]:
     return [
-        {"text": "Docling extracts text and images from PDF documents.", "metadata": {"source": "doc.pdf", "page_number": 1}},
+        {"text": "Docling extracts text from PDF documents.", "metadata": {"source": "doc.pdf", "page_number": 1}},
         {"text": "FastEmbed runs on ONNX and requires no GPU.", "metadata": {"source": "doc.pdf", "page_number": 2}},
         {"text": "Qdrant stores dense vectors for similarity search.", "metadata": {"source": "doc.pdf", "page_number": 3}},
     ]

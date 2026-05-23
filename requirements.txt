@@ -1,4 +1,6 @@
 langchain
+langchain-cohere
+langchain-openai
 langchain-docling
 langchain_text_splitters
 pydantic
@@ -6,9 +8,13 @@ pydantic-settings
 fastapi
 python-multipart
 httpx
+python-dotenv
 uvicorn[standard]
 
 docling
 pytest
 fastembed
 qdrant_client
+mlflow
+ragas
+evidently

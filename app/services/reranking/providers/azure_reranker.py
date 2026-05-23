@@ -73,12 +73,6 @@ class _AzureCohereRerankerAdapter:
             ]
         ]
 
-    def compress_documents(self, *, documents: list[Any], query: str) -> list[Any]:
-        raise RerankerServiceError(
-            "Azure Cohere reranker compression is not implemented for the current provider endpoint."
-        )
-
-
 class AzureCohereRerankerService(BaseRerankerService):
     """Azure Cohere-based reranker service using Cohere's Azure base URL."""
 

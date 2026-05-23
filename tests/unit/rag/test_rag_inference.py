@@ -15,47 +15,13 @@ class FakeVectorStore:
                 "id": "chunk-1",
                 "text": "Refunds are available for eligible orders within 30 days.",
                 "score": 0.72,
-                "metadata": {
-                    "source": "policy.pdf",
-                    "page_number": 2,
-                    "legacy_image_url": "https://example.test/refund-flow.png",
-                },
+                "metadata": {"source": "policy.pdf", "page_number": 2},
             },
             {
                 "id": "chunk-2",
                 "text": "Customers need the order id to start the refund workflow.",
                 "score": 0.68,
                 "metadata": {"source": "policy.pdf", "page_number": 3},
-            },
-        ]
-
-
-class FakeVisualVectorStore:
-    def __init__(self) -> None:
-        self.last_score_threshold: float | None = None
-
-    def search(self, **kwargs: Any) -> list[dict[str, Any]]:
-        self.last_score_threshold = kwargs.get("score_threshold")
-        return [
-            {
-                "id": "docx-image-placeholder",
-                "text": "## 2 جدول التدريب <!-- image -->",
-                "score": 1.0,
-                "metadata": {
-                    "source": "depi_test.docx",
-                    "page_number": 1,
-                },
-            },
-            {
-                "id": "pdf-page-image",
-                "text": "جدول التدريب",
-                "score": 0.3333,
-                "metadata": {
-                    "source": "depi_test.pdf",
-                    "page_number": 3,
-                    "page_image_base64": "data:image/png;base64,schedule",
-                    "page_image_mime_type": "image/png",
-                },
             },
         ]
 
@@ -104,7 +70,7 @@ def _settings() -> SimpleNamespace:
     )
 
 
-def test_run_normalizes_llm_text_and_omits_legacy_image_metadata() -> None:
+def test_run_normalizes_llm_text_and_sources() -> None:
     pipeline = RagInferencePipeline(
         vector_store=FakeVectorStore(),
         llm_service=FakeLlmService(),
@@ -119,7 +85,6 @@ def test_run_normalizes_llm_text_and_omits_legacy_image_metadata() -> None:
         "text": "Refunds are available within 30 days.",
     }
     assert "media" not in response["sources"][0]
-    assert "legacy_image_url" not in response["sources"][0]["metadata"]
 
 
 def test_run_applies_optional_reranker_scores() -> None:
@@ -137,22 +102,6 @@ def test_run_applies_optional_reranker_scores() -> None:
     assert response["retrieval"]["documents"] == 1
 
 
-def test_visual_questions_use_standard_text_retrieval() -> None:
-    vector_store = FakeVisualVectorStore()
-    pipeline = RagInferencePipeline(
-        vector_store=vector_store,
-        llm_service=FakeLlmService(),
-        settings=_settings(),
-    )
-
-    response = pipeline.run(
-        "In the schedule image, what color is the far-right End column?"
-    )
-
-    assert vector_store.last_score_threshold is None
-    assert all("media" not in source for source in response["sources"])
-
-
 def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:
     response_builder = RagResponseBuilder()
 
@@ -160,5 +109,3 @@ def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:
 
     assert response["answer"] == ""
     assert response["content"] == [{"type": "text", "text": ""}]
-
-

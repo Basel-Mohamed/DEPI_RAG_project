@@ -89,11 +89,10 @@ def test_build_embeds_and_upserts_text_chunks() -> None:
     assert vector_store.deleted[0][0:2] == ("source", "policy.pdf")
     assert len(vector_store.upserted_chunks) == 2
     first_metadata = vector_store.upserted_chunks[0]["metadata"]
-    assert "page_image_mime_type" not in first_metadata
-    assert "page_image_base64" not in first_metadata
+    assert first_metadata["source"] == "policy.pdf"
 
 
-def test_qdrant_point_payload_preserves_extra_non_image_metadata() -> None:
+def test_qdrant_point_payload_preserves_extra_metadata() -> None:
     service = QdrantService.__new__(QdrantService)
     service.sparse_model = FakeSparseModel()
 

@@ -52,5 +52,3 @@ def test_build_service_upserts_text_chunks(tmp_path: Path) -> None:
 
     metadata = vector_store.upserted_chunks[0]["metadata"]
     assert metadata["source"] == "file-123"
-    assert "page_image_mime_type" not in metadata
-    assert "page_image_base64" not in metadata

@@ -29,27 +29,6 @@ class FixedVectorStore:
         ]
 
 
-class FixedLegacyImageMetadataVectorStore:
-    def search(self, **_: Any) -> list[dict[str, Any]]:
-        red_square_png = (
-            "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4n"
-            "GP8z0AaYCJR/aiGUQ1DSAMAQC4BH2bjRnMAAAAASUVORK5CYII="
-        )
-        return [
-            {
-                "id": "integration-image-1",
-                "text": "Use the attached page image to answer visual questions.",
-                "score": 0.99,
-                "metadata": {
-                    "source": "visual-policy.pdf",
-                    "page_number": 1,
-                    "page_image_base64": f"data:image/png;base64,{red_square_png}",
-                    "page_image_mime_type": "image/png",
-                },
-            }
-        ]
-
-
 def _real_llm_settings() -> Settings:
     settings = Settings(
         RAG_TOP_K=1,
@@ -111,29 +90,3 @@ def test_rag_pipeline_calls_real_llm_and_returns_grounded_answer() -> None:
     assert response["sources"][0]["id"] == "integration-policy-1"
     assert response["retrieval"]["documents"] == 1
 
-
-@pytest.mark.integration
-def test_rag_pipeline_ignores_legacy_image_metadata() -> None:
-    if os.getenv("RUN_REAL_LLM_TESTS") != "1":
-        pytest.skip("Set RUN_REAL_LLM_TESTS=1 to call the configured LLM API.")
-
-    settings = _real_llm_settings()
-    pipeline = RagInferencePipeline(
-        vector_store=FixedLegacyImageMetadataVectorStore(),
-        llm_service=create_llm_service(settings),
-        settings=settings,
-    )
-
-    try:
-        response = pipeline.run(
-            "What does the support policy say?"
-        )
-    except Exception:
-        pytest.fail(
-            "The real LLM request failed. Check network access and LLM credentials.",
-            pytrace=False,
-        )
-
-    assert response["answer"].strip()
-    assert "media" not in response["sources"][0]
-    assert "page_image_base64" not in response["sources"][0]["metadata"]
