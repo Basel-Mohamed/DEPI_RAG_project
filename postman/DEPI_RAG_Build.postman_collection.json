@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "2b7db5d5-f6d6-4bd1-82b2-df69509af0d6",
-    "name": "DEPI RAG - Build API",
-    "description": "Postman collection for the currently mounted DEPI RAG build routes. Set base_url to your API host, usually http://localhost:8000. Upload a PDF first; the upload response stores file_id as a collection variable.",
+    "name": "DEPI RAG API",
+    "description": "Postman collection for the DEPI RAG API. Set base_url to your API host, usually http://localhost:8000, and api_key to the value configured in .env. Upload a PDF first; the upload response stores file_id as a collection variable.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,8 +12,18 @@
       "type": "string"
     },
     {
+      "key": "api_key",
+      "value": "change-me",
+      "type": "string"
+    },
+    {
       "key": "file_id",
       "value": "",
+      "type": "string"
+    },
+    {
+      "key": "session_id",
+      "value": "postman-session-001",
       "type": "string"
     }
   ],
@@ -34,7 +44,27 @@
               "path": [
                 "health"
               ]
-            }
+            },
+            "description": "Unauthenticated process health check."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health/qdrant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/qdrant",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "qdrant"
+              ]
+            },
+            "description": "Authenticated Qdrant health and point-count check."
           },
           "response": []
         }
@@ -212,6 +242,316 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Inference",
+      "item": [
+        {
+          "name": "POST /ask - Ask Question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What is the refund policy?\",\n  \"mode\": \"hybrid\",\n  \"include_sources\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /ask - Ask With Source Filter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ask",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Summarize this document.\",\n  \"source\": \"sample.pdf\",\n  \"mode\": \"hybrid\",\n  \"score_threshold\": 0.6,\n  \"include_sources\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /ask/stream - Stream Answer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/ask/stream",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ask",
+                "stream"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What are the main points?\",\n  \"mode\": \"hybrid\",\n  \"include_sources\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Returns application/x-ndjson streaming chunks."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Feedback",
+      "item": [
+        {
+          "name": "POST /feedback - Submit Positive Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/feedback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feedback"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"question\": \"What is the refund policy?\",\n  \"answer\": \"Refunds are available within 30 days.\",\n  \"rating\": 1,\n  \"timestamp\": \"2026-05-23T15:30:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST /feedback - Submit Negative Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/feedback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feedback"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{session_id}}\",\n  \"question\": \"What is the refund policy?\",\n  \"answer\": \"I could not find enough information.\",\n  \"rating\": -1,\n  \"timestamp\": \"2026-05-23T15:31:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /feedback - List Feedback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/feedback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feedback"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /feedback?session_id={{session_id}}&limit=10 - Filter Feedback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/feedback?session_id={{session_id}}&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feedback"
+              ],
+              "query": [
+                {
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /feedback/satisfaction - Satisfaction Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/feedback/satisfaction",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "feedback",
+                "satisfaction"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Monitoring",
+      "item": [
+        {
+          "name": "GET /metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            },
+            "description": "Returns persisted request, provider latency, token, and feedback KPIs. Live Qdrant status is available from GET /health/qdrant."
+          },
+          "response": []
+        },
+        {
+          "name": "POST /metrics/reset",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics/reset",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "metrics",
+                "reset"
+              ]
+            },
+            "description": "Clears persisted monitoring metrics so counters start again from zero."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health/qdrant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/qdrant",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health",
+                "qdrant"
+              ]
+            },
+            "description": "Returns whether Qdrant is up plus collection status and point count."
+          },
+          "response": []
+        }
+      ]
     }
-  ]
+  ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  }
 }

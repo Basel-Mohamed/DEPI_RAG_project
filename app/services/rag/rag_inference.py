@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import logging
+import re
+import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
 from app.core.config import Settings, settings as global_settings
+from app.controllers.monitoring_controller import MonitoringMetrics
 from app.services.llm.providers.base_llm import (
     DEFAULT_FALLBACK_ANSWER,
     BaseLlmService,
@@ -78,8 +81,12 @@ class RagInferencePipeline:
             return self.response_builder.empty_response(DEFAULT_FALLBACK_ANSWER)
 
         clean_question, documents = context
-
+        start = time.perf_counter()
         raw_answer = self.llm_service.generate(clean_question, documents)
+        MonitoringMetrics.record_llm(
+            (time.perf_counter() - start) * 1000,
+            self._estimate_tokens(str(raw_answer)),
+        )
 
         return self.response_builder.build(
             raw_answer,
@@ -144,8 +151,17 @@ class RagInferencePipeline:
 
         clean_question, documents = context
 
-        for raw_chunk in self.llm_service.stream(clean_question, documents):
-            yield self.response_builder.build_delta(raw_chunk)
+        start = time.perf_counter()
+        token_count = 0
+        try:
+            for raw_chunk in self.llm_service.stream(clean_question, documents):
+                token_count += self._estimate_tokens(str(raw_chunk))
+                yield self.response_builder.build_delta(raw_chunk)
+        finally:
+            MonitoringMetrics.record_llm(
+                (time.perf_counter() - start) * 1000,
+                token_count,
+            )
 
         yield {
             "event": "sources",
@@ -199,7 +215,12 @@ class RagInferencePipeline:
             return documents[:top_k]
 
         try:
-            return self.reranker.rerank(question, documents, top_k=top_k)
+            start = time.perf_counter()
+            ranked_documents = self.reranker.rerank(question, documents, top_k=top_k)
+            MonitoringMetrics.record_reranking_latency(
+                (time.perf_counter() - start) * 1000
+            )
+            return ranked_documents
         except Exception:
             logger.exception("Reranking failed; falling back to retrieval order.")
             return documents[:top_k]
@@ -215,3 +236,7 @@ class RagInferencePipeline:
             "documents": len(documents),
             "mode": str(mode or getattr(self.settings, "RETRIEVAL_MODE", "hybrid")),
         }
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        return len(re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE))

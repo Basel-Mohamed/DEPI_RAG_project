@@ -45,3 +45,52 @@ def test_sqlite_metadata_store_appends_feedback(tmp_path):
     store.append_feedback(second, feedback_path)
 
     assert store.read_feedback(feedback_path) == [second, first]
+
+
+def test_sqlite_metadata_store_persists_and_clears_monitoring_metrics(tmp_path):
+    store = SqliteMetadataStore(tmp_path / "metadata.sqlite3")
+    metrics_path = tmp_path / "metrics.json"
+    first = {
+        "metric_id": "metric-1",
+        "metric_name": "request_latency_ms",
+        "value": 50.0,
+        "created_at": "2026-05-23T10:00:00+00:00",
+    }
+    second = {
+        "metric_id": "metric-2",
+        "metric_name": "llm_tokens",
+        "value": 25,
+        "created_at": "2026-05-23T10:00:01+00:00",
+    }
+
+    store.append_monitoring_metric(first, metrics_path)
+    store.append_monitoring_metric(second, metrics_path)
+
+    assert store.read_monitoring_metrics(metrics_path) == [
+        {
+            "metric_name": "request_latency_ms",
+            "value": 50.0,
+            "created_at": "2026-05-23T10:00:00+00:00",
+        },
+        {
+            "metric_name": "llm_tokens",
+            "value": 25.0,
+            "created_at": "2026-05-23T10:00:01+00:00",
+        },
+    ]
+    assert store.aggregate_monitoring_metrics(metrics_path) == {
+        "request_latency_ms": {
+            "count": 1,
+            "total": 50.0,
+            "average": 50.0,
+        },
+        "llm_tokens": {
+            "count": 1,
+            "total": 25.0,
+            "average": 25.0,
+        },
+    }
+
+    store.clear_monitoring_metrics(metrics_path)
+
+    assert store.read_monitoring_metrics(metrics_path) == []
