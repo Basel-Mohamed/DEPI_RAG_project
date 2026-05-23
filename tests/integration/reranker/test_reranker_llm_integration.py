@@ -58,8 +58,6 @@ class TestRerankerLlmIntegration(unittest.TestCase):
             self.skipTest(f"Missing optional LLM integration dependency: {exc}")
 
         cohere_cls = cohere_module.CohereLlmService
-        cohere_cls._singleton_llm = None
-        cohere_cls._singleton_config = None
         return cohere_cls
 
     def test_cohere_rerank_to_cohere_llm(self) -> None:

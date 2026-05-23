@@ -49,10 +49,6 @@ class TestLlmProviders(unittest.TestCase):
 
         azure_cls = azure_module.AzureLlmService
         cohere_cls = cohere_module.CohereLlmService
-        azure_cls._singleton_llm = None
-        azure_cls._singleton_config = None
-        cohere_cls._singleton_llm = None
-        cohere_cls._singleton_config = None
         return azure_cls, cohere_cls
 
     def test_cohere(self) -> None:

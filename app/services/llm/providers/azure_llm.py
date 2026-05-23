@@ -6,7 +6,6 @@ from typing import Any
 from app.services.llm.prompts import (
     build_context_text,
     build_langchain_chain,
-    build_prompt_messages,
     stream_langchain_chain,
 )
 from app.services.llm.providers.base_llm import (
@@ -18,11 +17,6 @@ from app.services.types import RetrievedContext
 
 
 class AzureLlmService(BaseLlmService):
-    _singleton_llm: Any | None = None
-    _singleton_config: (
-        tuple[str, str, str, str, float, int] | None
-    ) = None
-
     def __init__(
         self,
         azure_endpoint: str,
@@ -41,20 +35,13 @@ class AzureLlmService(BaseLlmService):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.fallback_answer = fallback_answer
+        self._llm: Any | None = None
 
     def build_context(self, documents: list[RetrievedContext]) -> str:
         return build_context_text(
             self._text_only_documents(documents),
             include_metadata=True,
         )
-
-    def build_messages(
-        self,
-        question: str,
-        documents: list[RetrievedContext],
-    ) -> list[dict[str, Any]]:
-        context = self.build_context(documents)
-        return build_prompt_messages(question=question, context=context)
 
     def generate(self, question: str, documents: list[RetrievedContext]) -> str:
         if not question.strip():
@@ -124,44 +111,9 @@ class AzureLlmService(BaseLlmService):
             )
         return cleaned_documents
 
-
-    @staticmethod
-    def _extract_text(response: Any, *, strip: bool = True) -> str:
-        content = getattr(response, "content", response)
-
-        if isinstance(content, str):
-            return content.strip() if strip else content
-
-        if isinstance(content, list):
-            text_parts: list[str] = []
-            for item in content:
-                if isinstance(item, str):
-                    text_parts.append(item)
-                elif isinstance(item, dict):
-                    text = item.get("text") or item.get("content")
-                    if text:
-                        text_parts.append(str(text))
-            text = "".join(text_parts)
-            return text.strip() if strip else text
-
-        text = str(content)
-        return text.strip() if strip else text
-
     def _get_llm(self) -> Any:
-        config = (
-            self.azure_endpoint,
-            self.api_key,
-            self.deployment_name,
-            self.api_version,
-            self.temperature,
-            self.max_tokens,
-        )
-        if self.__class__._singleton_llm is not None:
-            if self.__class__._singleton_config != config:
-                raise LlmServiceError(
-                    "AzureLlmService singleton was already initialized with a different configuration."
-                )
-            return self.__class__._singleton_llm
+        if self._llm is not None:
+            return self._llm
 
         try:
             from langchain_openai import AzureChatOpenAI
@@ -171,7 +123,7 @@ class AzureLlmService(BaseLlmService):
                 "AzureLlmService."
             ) from exc
 
-        self.__class__._singleton_llm = AzureChatOpenAI(
+        self._llm = AzureChatOpenAI(
             api_key=self.api_key,
             azure_endpoint=self.azure_endpoint,
             api_version=self.api_version,
@@ -179,5 +131,4 @@ class AzureLlmService(BaseLlmService):
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        self.__class__._singleton_config = config
-        return self.__class__._singleton_llm
+        return self._llm

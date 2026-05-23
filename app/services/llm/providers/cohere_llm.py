@@ -19,9 +19,6 @@ from app.services.types import RetrievedContext
 class CohereLlmService(BaseLlmService):
     """Cohere implementation backed by LangChain chat models."""
 
-    _singleton_llm: Any | None = None
-    _singleton_config: tuple[str, str, float, int] | None = None
-
     def __init__(
         self,
         api_key: str,
@@ -36,6 +33,7 @@ class CohereLlmService(BaseLlmService):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.fallback_answer = fallback_answer
+        self._llm: Any | None = None
 
     def build_context(self, documents: list[RetrievedContext]) -> str:
         """Build a concise context block for Cohere generation."""
@@ -94,20 +92,10 @@ class CohereLlmService(BaseLlmService):
             raise LlmServiceError("Cohere answer streaming failed.") from exc
 
     def _get_llm(self) -> Any:
-        """Lazily create and reuse a process-wide LangChain Cohere chat model."""
+        """Lazily create and reuse this service's LangChain Cohere chat model."""
 
-        config = (
-            self.api_key,
-            self.model_name,
-            self.temperature,
-            self.max_tokens,
-        )
-        if self.__class__._singleton_llm is not None:
-            if self.__class__._singleton_config != config:
-                raise LlmServiceError(
-                    "CohereLlmService singleton was already initialized with a different configuration."
-                )
-            return self.__class__._singleton_llm
+        if self._llm is not None:
+            return self._llm
 
         try:
             from langchain_cohere import ChatCohere
@@ -117,11 +105,10 @@ class CohereLlmService(BaseLlmService):
                 "CohereLlmService."
             ) from exc
 
-        self.__class__._singleton_llm = ChatCohere(
+        self._llm = ChatCohere(
             cohere_api_key=self.api_key,
             model=self.model_name,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        self.__class__._singleton_config = config
-        return self.__class__._singleton_llm
+        return self._llm
