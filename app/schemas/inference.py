@@ -7,8 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class InferenceRequest(BaseModel):
     question: str = Field(..., min_length=1)
-    top_k: int | None = Field(default=None, ge=1, le=50)
-    retrieval_top_k: int | None = Field(default=None, ge=1, le=100)
     mode: Literal["dense", "sparse", "hybrid"] | None = None
     source: str | None = Field(
         default=None,

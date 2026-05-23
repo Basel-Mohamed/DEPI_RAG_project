@@ -171,7 +171,6 @@ def create_reranker_service(settings: Settings) -> BaseRerankerService | None:
     if provider in {"", "none", "off", "false", "disabled"}:
         return None
 
-    top_n = getattr(settings, "reranker_top_n", None)
     if provider == RerankerType.COHERE.value:
         api_key = getattr(settings, "cohere_api_key", None)
         if not api_key:
@@ -180,7 +179,6 @@ def create_reranker_service(settings: Settings) -> BaseRerankerService | None:
         return RerankerFactory.create_cohere_reranker(
             api_key=api_key,
             model_name=getattr(settings, "cohere_rerank_model", "rerank-v3.5"),
-            top_n=top_n,
         )
 
     if provider == RerankerType.AZURE_COHERE.value:
@@ -195,7 +193,6 @@ def create_reranker_service(settings: Settings) -> BaseRerankerService | None:
             api_key=api_key,
             base_url=base_url,
             model_name=getattr(settings, "azure_cohere_model", "model"),
-            top_n=top_n,
         )
 
     logger.warning("Unsupported reranker provider '%s'; reranking disabled.", provider)

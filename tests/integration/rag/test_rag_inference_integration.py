@@ -31,8 +31,8 @@ class FixedVectorStore:
 
 def _real_llm_settings() -> Settings:
     settings = Settings(
-        RAG_TOP_K=1,
         RAG_RETRIEVAL_TOP_K=1,
+        RAG_RERANK_TOP_K=1,
         reranker_provider=None,
         llm_temperature=0.0,
         llm_max_tokens=120,

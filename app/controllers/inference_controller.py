@@ -20,16 +20,12 @@ class InferenceController:
         filter_field, filter_value = self._filter_params(request)
 
         logger.info(
-            "inference started mode=%s top_k=%s retrieval_top_k=%s filter_field=%s",
+            "inference started mode=%s filter_field=%s",
             request.mode,
-            request.top_k,
-            request.retrieval_top_k,
             filter_field,
         )
         response = self.pipeline.run(
             question,
-            top_k=request.top_k,
-            retrieval_top_k=request.retrieval_top_k,
             mode=request.mode,
             filter_field=filter_field,
             filter_value=filter_value,
@@ -47,10 +43,8 @@ class InferenceController:
         filter_field, filter_value = self._filter_params(request)
 
         logger.info(
-            "inference stream started mode=%s top_k=%s retrieval_top_k=%s filter_field=%s",
+            "inference stream started mode=%s filter_field=%s",
             request.mode,
-            request.top_k,
-            request.retrieval_top_k,
             filter_field,
         )
         return self._stream_chunks(
@@ -71,8 +65,6 @@ class InferenceController:
         try:
             for chunk in self.pipeline.stream(
                 question,
-                top_k=request.top_k,
-                retrieval_top_k=request.retrieval_top_k,
                 mode=request.mode,
                 filter_field=filter_field,
                 filter_value=filter_value,

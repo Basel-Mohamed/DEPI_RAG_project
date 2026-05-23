@@ -65,8 +65,8 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # RAG inference
     # ------------------------------------------------------------------
-    RAG_TOP_K: int = 5
     RAG_RETRIEVAL_TOP_K: int = 10
+    RAG_RERANK_TOP_K: int = 5
 
     # ------------------------------------------------------------------
     # Metadata and artifact storage
@@ -97,7 +97,6 @@ class Settings(BaseSettings):
     # Optional reranking
     # ------------------------------------------------------------------
     reranker_provider: str | None = None
-    reranker_top_n: int | None = 5
     cohere_rerank_model: str = "rerank-v3.5"
     azure_cohere_base_url: str | None = None
     azure_cohere_api_key: str | None = None

@@ -74,8 +74,6 @@ class RagInferencePipeline:
         self,
         question: str,
         *,
-        top_k: int | None = None,
-        retrieval_top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -90,8 +88,6 @@ class RagInferencePipeline:
 
         documents = self.retrieve(
             clean_question,
-            top_k=top_k,
-            retrieval_top_k=retrieval_top_k,
             mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,
@@ -113,8 +109,6 @@ class RagInferencePipeline:
         self,
         question: str,
         *,
-        top_k: int | None = None,
-        retrieval_top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -126,11 +120,8 @@ class RagInferencePipeline:
         if not clean_question:
             return []
 
-        final_top_k = top_k or int(getattr(self.settings, "RAG_TOP_K", 5))
-        search_top_k = retrieval_top_k or int(
-            getattr(self.settings, "RAG_RETRIEVAL_TOP_K", max(final_top_k, 10))
-        )
-        search_top_k = max(search_top_k, final_top_k)
+        final_top_k = int(self.settings.RAG_RERANK_TOP_K)
+        search_top_k = int(self.settings.RAG_RETRIEVAL_TOP_K)
 
         raw_results = self.vector_store.search(
             query=clean_question,
@@ -160,8 +151,6 @@ class RagInferencePipeline:
         self,
         question: str,
         *,
-        top_k: int | None = None,
-        retrieval_top_k: int | None = None,
         mode: SearchMode | str | None = None,
         filter_field: str | None = None,
         filter_value: Any = None,
@@ -177,8 +166,6 @@ class RagInferencePipeline:
 
         documents = self.retrieve(
             clean_question,
-            top_k=top_k,
-            retrieval_top_k=retrieval_top_k,
             mode=mode,
             filter_field=filter_field,
             filter_value=filter_value,

@@ -52,8 +52,6 @@ def test_controller_ask_passes_normalized_request_to_pipeline() -> None:
     assert response["answer"] == "Refunds are available within 30 days."
     assert fake_pipeline.last_run == {
         "question": "How do refunds work?",
-        "top_k": None,
-        "retrieval_top_k": None,
         "mode": None,
         "filter_field": "source",
         "filter_value": "policy.pdf",

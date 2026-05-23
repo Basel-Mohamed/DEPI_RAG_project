@@ -63,8 +63,8 @@ class FakeReranker:
 
 def _settings() -> SimpleNamespace:
     return SimpleNamespace(
-        RAG_TOP_K=2,
         RAG_RETRIEVAL_TOP_K=4,
+        RAG_RERANK_TOP_K=2,
         RETRIEVAL_MODE="hybrid",
         reranker_provider=None,
     )
@@ -95,11 +95,11 @@ def test_run_applies_optional_reranker_scores() -> None:
         settings=_settings(),
     )
 
-    response = pipeline.run("How do refunds work?", top_k=1)
+    response = pipeline.run("How do refunds work?")
 
     assert response["sources"][0]["id"] == "chunk-2"
     assert response["sources"][0]["metadata"]["rerank_score"] == 0.97
-    assert response["retrieval"]["documents"] == 1
+    assert response["retrieval"]["documents"] == 2
 
 
 def test_stream_delta_empty_chunk_does_not_use_fallback_answer() -> None:

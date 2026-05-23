@@ -36,8 +36,8 @@ def test_rag_pipeline_retrieves_then_generates_answer() -> None:
         vector_store=vector_store,
         llm_service=FakeLlmService(),
         settings=SimpleNamespace(
-            RAG_TOP_K=1,
             RAG_RETRIEVAL_TOP_K=3,
+            RAG_RERANK_TOP_K=1,
             RETRIEVAL_MODE="hybrid",
             reranker_provider=None,
         ),
@@ -51,5 +51,6 @@ def test_rag_pipeline_retrieves_then_generates_answer() -> None:
 
     assert response["answer"] == "Refunds are available within 30 days."
     assert response["retrieval"] == {"documents": 1, "mode": "hybrid"}
+    assert vector_store.last_kwargs["top_k"] == 3
     assert vector_store.last_kwargs["filter_field"] == "source"
     assert vector_store.last_kwargs["filter_value"] == "policy.pdf"
