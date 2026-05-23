@@ -57,27 +57,15 @@ class _AzureCohereRerankerAdapter:
         results = payload.get("results", [])
         return [
             {
-                "index": int(result.index),
-                "relevance_score": float(result.relevance_score),
+                "index": int(item.get("index", 0)),
+                "relevance_score": float(item.get("relevance_score", 0.0)),
             }
-            for result in [
-                type(
-                    "AzureRerankResult",
-                    (),
-                    {
-                        "index": item.get("index", 0),
-                        "relevance_score": item.get("relevance_score", 0.0),
-                    },
-                )()
-                for item in results
-            ]
+            for item in results
         ]
+
 
 class AzureCohereRerankerService(BaseRerankerService):
     """Azure Cohere-based reranker service using Cohere's Azure base URL."""
-
-    _singleton_reranker: Any | None = None
-    _singleton_config: tuple[str, str, str, int | None] | None = None
 
     def __init__(
         self,
@@ -91,23 +79,17 @@ class AzureCohereRerankerService(BaseRerankerService):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model_name = model_name
+        self._reranker: Any | None = None
 
     def _get_reranker(self) -> Any:
-        """Lazily create and reuse a process-wide Azure Cohere reranker."""
+        """Lazily create and reuse this service's Azure Cohere reranker."""
 
-        config = (self.api_key, self.base_url, self.model_name, self.top_n)
+        if self._reranker is not None:
+            return self._reranker
 
-        if self.__class__._singleton_reranker is not None:
-            if self.__class__._singleton_config != config:
-                raise RerankerServiceError(
-                    "AzureCohereRerankerService singleton was already initialized with a different configuration."
-                )
-            return self.__class__._singleton_reranker
-
-        self.__class__._singleton_reranker = _AzureCohereRerankerAdapter(
+        self._reranker = _AzureCohereRerankerAdapter(
             api_key=self.api_key,
             base_url=self.base_url,
             model_name=self.model_name,
         )
-        self.__class__._singleton_config = config
-        return self.__class__._singleton_reranker
+        return self._reranker

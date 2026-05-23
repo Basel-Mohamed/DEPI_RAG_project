@@ -21,46 +21,13 @@ class BaseRerankerService(ABC):
         """Get the underlying reranker implementation."""
         pass
 
-    def _extract_content_and_metadata(self, document: Any) -> tuple[str, dict[str, Any]]:
-        """Extract content and metadata from document in a consistent way."""
-        if isinstance(document, dict):
-            content = document.get('content', '')
-            metadata = {
-                **(document.get('metadata', {}) or {}),
-                'id': document.get('id', ''),
-                'title': document.get('title', ''),
-            }
-        elif isinstance(document, RetrievedContext):
-            content = document.content
-            metadata = {
-                **(document.metadata or {}),
-                'id': document.id,
-                'title': document.title,
-            }
-        elif hasattr(document, 'page_content'):
-            content = document.page_content
-            metadata = getattr(document, 'metadata', {})
-        else:
-            content = str(getattr(document, 'content', '') or str(document))
-            metadata = {
-                **(getattr(document, 'metadata', {}) or {}),
-                'id': getattr(document, 'id', ''),
-                'title': getattr(document, 'title', ''),
-            }
-        if not isinstance(metadata, dict):
-            metadata = {'raw_metadata': metadata}
-        return content, metadata
-
-    def score(self, query: str, documents: list[Any]) -> list[float]:
+    def score(self, query: str, documents: list[RetrievedContext]) -> list[float]:
         """Return relevance scores aligned with the original document order."""
 
         if not query.strip() or not documents:
             return []
 
-        document_texts = [
-            self._extract_content_and_metadata(document)[0]
-            for document in documents
-        ]
+        document_texts = [document.content for document in documents]
 
         try:
             results = self._get_reranker().rerank(
@@ -79,7 +46,7 @@ class BaseRerankerService(ABC):
     def rerank(
         self,
         query: str,
-        documents: list[Any],
+        documents: list[RetrievedContext],
         top_k: int | None = None,
     ) -> list[RetrievedContext]:
         """Return the documents ordered by relevance score."""
@@ -112,17 +79,17 @@ class BaseRerankerService(ABC):
 
     def _convert_to_retrieved_context(
         self,
-        document: Any,
+        document: RetrievedContext,
         *,
         score: float | None = None,
     ) -> RetrievedContext:
         """Convert document to RetrievedContext for output consistency."""
-        content, metadata = self._extract_content_and_metadata(document)
+        metadata = dict(document.metadata or {})
         if score is not None:
             metadata = {**metadata, "rerank_score": score}
         return RetrievedContext(
-            id=str(metadata.get('_id', metadata.get('id', metadata.get('source_id', '')))),
-            title=str(metadata.get('title', '')),
-            content=content,
+            id=document.id,
+            title=document.title,
+            content=document.content,
             metadata=metadata,
         )

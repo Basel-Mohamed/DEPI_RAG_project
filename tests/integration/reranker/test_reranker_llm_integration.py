@@ -47,10 +47,6 @@ def _build_dummy_chunks() -> list[RetrievedContext]:
 
 
 class TestRerankerLlmIntegration(unittest.TestCase):
-    def setUp(self) -> None:
-        CohereRerankerService._singleton_reranker = None
-        CohereRerankerService._singleton_config = None
-
     def _load_cohere_llm_class(self) -> type:
         try:
             cohere_module = import_module("app.services.llm.providers.cohere_llm")

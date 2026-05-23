@@ -47,12 +47,6 @@ def _build_dummy_chunks() -> list[RetrievedContext]:
 
 
 class TestRerankerProviders(unittest.TestCase):
-    def setUp(self) -> None:
-        CohereRerankerService._singleton_reranker = None
-        CohereRerankerService._singleton_config = None
-        AzureCohereRerankerService._singleton_reranker = None
-        AzureCohereRerankerService._singleton_config = None
-
     def test_cohere(self) -> None:
         api_key = os.getenv("COHERE_API_KEY")
         if not api_key:
