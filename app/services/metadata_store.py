@@ -26,6 +26,25 @@ class MetadataStore(Protocol):
     def append_feedback(self, record: dict[str, Any], feedback_path: Path) -> None:
         ...
 
+    def read_monitoring_metrics(self, metrics_path: Path) -> list[dict[str, Any]]:
+        ...
+
+    def aggregate_monitoring_metrics(
+        self,
+        metrics_path: Path,
+    ) -> dict[str, dict[str, float | int]]:
+        ...
+
+    def append_monitoring_metric(
+        self,
+        record: dict[str, Any],
+        metrics_path: Path,
+    ) -> None:
+        ...
+
+    def clear_monitoring_metrics(self, metrics_path: Path) -> None:
+        ...
+
 
 class JsonMetadataStore:
     def read_file_registry(self, registry_path: Path) -> dict[str, dict[str, Any]]:
@@ -58,6 +77,43 @@ class JsonMetadataStore:
         feedback.append(record)
         self._write_json(feedback_path, feedback)
 
+    def read_monitoring_metrics(self, metrics_path: Path) -> list[dict[str, Any]]:
+        if not metrics_path.exists():
+            return []
+        with metrics_path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        if not isinstance(data, list):
+            raise ValueError("Monitoring metrics store is corrupted.")
+        return data
+
+    def aggregate_monitoring_metrics(
+        self,
+        metrics_path: Path,
+    ) -> dict[str, dict[str, float | int]]:
+        aggregates: dict[str, dict[str, float | int]] = {}
+        for record in self.read_monitoring_metrics(metrics_path):
+            metric_name = str(record.get("metric_name"))
+            aggregate = aggregates.setdefault(
+                metric_name,
+                {"count": 0, "total": 0.0, "average": 0.0},
+            )
+            aggregate["count"] = int(aggregate["count"]) + 1
+            aggregate["total"] = float(aggregate["total"]) + float(record.get("value", 0.0))
+            aggregate["average"] = float(aggregate["total"]) / int(aggregate["count"])
+        return aggregates
+
+    def append_monitoring_metric(
+        self,
+        record: dict[str, Any],
+        metrics_path: Path,
+    ) -> None:
+        metrics = self.read_monitoring_metrics(metrics_path)
+        metrics.append(record)
+        self._write_json(metrics_path, metrics)
+
+    def clear_monitoring_metrics(self, metrics_path: Path) -> None:
+        self._write_json(metrics_path, [])
+
     @staticmethod
     def _write_json(path: Path, payload: Any) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,6 +126,7 @@ class JsonMetadataStore:
 class SqlMetadataStoreBase:
     file_registry_table: str
     feedback_table: str
+    monitoring_metrics_table: str
 
     def read_file_registry(self, registry_path: Path) -> dict[str, dict[str, Any]]:
         connection = self._connect()
@@ -141,6 +198,94 @@ class SqlMetadataStoreBase:
         finally:
             connection.close()
 
+    def read_monitoring_metrics(self, metrics_path: Path) -> list[dict[str, Any]]:
+        connection = self._connect()
+        try:
+            self._ensure_schema(connection)
+            rows = connection.execute(
+                f"""
+                SELECT metric_name, value, created_at
+                FROM {self.monitoring_metrics_table}
+                ORDER BY created_at ASC
+                """
+            ).fetchall()
+            return [
+                {
+                    "metric_name": metric_name,
+                    "value": float(value),
+                    "created_at": created_at,
+                }
+                for metric_name, value, created_at in rows
+            ]
+        finally:
+            connection.close()
+
+    def aggregate_monitoring_metrics(
+        self,
+        metrics_path: Path,
+    ) -> dict[str, dict[str, float | int]]:
+        connection = self._connect()
+        try:
+            self._ensure_schema(connection)
+            rows = connection.execute(
+                f"""
+                SELECT metric_name, COUNT(*), SUM(value), AVG(value)
+                FROM {self.monitoring_metrics_table}
+                GROUP BY metric_name
+                """
+            ).fetchall()
+            return {
+                str(metric_name): {
+                    "count": int(count),
+                    "total": float(total or 0.0),
+                    "average": float(average or 0.0),
+                }
+                for metric_name, count, total, average in rows
+            }
+        finally:
+            connection.close()
+
+    def append_monitoring_metric(
+        self,
+        record: dict[str, Any],
+        metrics_path: Path,
+    ) -> None:
+        connection = self._connect()
+        try:
+            self._ensure_schema(connection)
+            connection.execute(
+                f"""
+                INSERT INTO {self.monitoring_metrics_table} (
+                    metric_id, metric_name, value, created_at
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    record["metric_id"],
+                    record["metric_name"],
+                    float(record["value"]),
+                    record["created_at"],
+                ),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def clear_monitoring_metrics(self, metrics_path: Path) -> None:
+        connection = self._connect()
+        try:
+            self._ensure_schema(connection)
+            connection.execute(f"DELETE FROM {self.monitoring_metrics_table}")
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     def _connect(self):
         raise NotImplementedError
 
@@ -181,6 +326,7 @@ class SqlMetadataStoreBase:
 class SqliteMetadataStore(SqlMetadataStoreBase):
     file_registry_table = "file_registry"
     feedback_table = "feedback"
+    monitoring_metrics_table = "monitoring_metrics"
 
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path or settings.METADATA_DB_PATH)
@@ -215,11 +361,29 @@ class SqliteMetadataStore(SqlMetadataStoreBase):
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_feedback_session_id ON feedback(session_id)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS monitoring_metrics (
+                metric_id TEXT PRIMARY KEY,
+                metric_name TEXT NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monitoring_metrics_name_created
+            ON monitoring_metrics(metric_name, created_at)
+            """
+        )
+        connection.commit()
 
 
 class AzureSqlMetadataStore(SqlMetadataStoreBase):
     file_registry_table = "dbo.file_registry"
     feedback_table = "dbo.feedback"
+    monitoring_metrics_table = "dbo.monitoring_metrics"
 
     @staticmethod
     def _connect():
@@ -285,6 +449,33 @@ class AzureSqlMetadataStore(SqlMetadataStoreBase):
             )
             BEGIN
                 CREATE INDEX idx_feedback_session_id ON dbo.feedback(session_id)
+            END
+            """
+        )
+        connection.execute(
+            """
+            IF OBJECT_ID(N'dbo.monitoring_metrics', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.monitoring_metrics (
+                    metric_id NVARCHAR(100) NOT NULL PRIMARY KEY,
+                    metric_name NVARCHAR(100) NOT NULL,
+                    value FLOAT NOT NULL,
+                    created_at NVARCHAR(50) NOT NULL
+                )
+            END
+            """
+        )
+        connection.execute(
+            """
+            IF NOT EXISTS (
+                SELECT 1
+                FROM sys.indexes
+                WHERE name = N'idx_monitoring_metrics_name_created'
+                  AND object_id = OBJECT_ID(N'dbo.monitoring_metrics')
+            )
+            BEGIN
+                CREATE INDEX idx_monitoring_metrics_name_created
+                ON dbo.monitoring_metrics(metric_name, created_at)
             END
             """
         )

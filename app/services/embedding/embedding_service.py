@@ -1,8 +1,10 @@
 import logging
+import time
 from typing import Any
 
 from fastembed import TextEmbedding
 from app.core.config import Settings, settings as global_settings
+from app.controllers.monitoring_controller import MonitoringMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,11 @@ class EmbeddingService:
             return []
 
         texts = [chunk["text"] for chunk in chunks]
+        start = time.perf_counter()
         embeddings = list(self.model.embed(texts))  # materialise the generator
+        MonitoringMetrics.record_embedding_latency(
+            (time.perf_counter() - start) * 1000
+        )
         if len(embeddings) != len(chunks):
             raise RuntimeError(
                 f"Embedding provider returned {len(embeddings)} vectors for {len(chunks)} chunks."
@@ -47,4 +53,9 @@ class EmbeddingService:
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a single query string for retrieval."""
-        return list(self.model.query_embed(query))[0].tolist()
+        start = time.perf_counter()
+        embedding = list(self.model.query_embed(query))[0].tolist()
+        MonitoringMetrics.record_embedding_latency(
+            (time.perf_counter() - start) * 1000
+        )
+        return embedding

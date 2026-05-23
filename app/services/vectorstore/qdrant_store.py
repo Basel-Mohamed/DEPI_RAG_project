@@ -1,5 +1,6 @@
 import uuid
 import logging
+import time
 from enum import Enum
 from typing import Any
 
@@ -27,6 +28,7 @@ from qdrant_client.models import (
 )
 
 from app.core.config import Settings, settings as global_settings
+from app.controllers.monitoring_controller import MonitoringMetrics
 from app.services.embedding.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -170,10 +172,14 @@ class QdrantService:
         rollback_build_id = next(iter(build_ids)) if len(build_ids) == 1 else None
 
         try:
+            start = time.perf_counter()
             self.client.upsert(
                 collection_name=self.collection,
                 points=points,
                 wait=True,
+            )
+            MonitoringMetrics.record_qdrant_latency(
+                (time.perf_counter() - start) * 1000
             )
         except Exception as e:
             logger.error("Upsert failed, attempting rollback: %s", e)
@@ -181,12 +187,14 @@ class QdrantService:
             raise
 
         # Verify
+        start = time.perf_counter()
         fetched = self.client.retrieve(
             collection_name=self.collection,
             ids=point_ids,
             with_payload=False,
             with_vectors=False,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         upserted_ids = {str(p.id) for p in fetched}
         failed_ids = [pid for pid in point_ids if str(pid) not in upserted_ids]
 
@@ -200,22 +208,26 @@ class QdrantService:
 
     def get_by_ids(self, point_ids: list[str]) -> list[dict[str, Any]]:
         """Retrieve specific points by their IDs."""
+        start = time.perf_counter()
         results = self.client.retrieve(
             collection_name=self.collection,
             ids=[self._to_uuid(pid) for pid in point_ids],
             with_payload=True,
             with_vectors=False,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         return [self._format_point(p) for p in results]
 
     def update_payload(self, point_id: str, payload: dict[str, Any]) -> None:
         """Update (merge) the payload of a single point."""
+        start = time.perf_counter()
         self.client.set_payload(
             collection_name=self.collection,
             payload=payload,
             points=[self._to_uuid(point_id)],
             wait=True,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         logger.info("Updated payload for point %s.", point_id)
 
     def delete_by_filter(
@@ -236,12 +248,15 @@ class QdrantService:
             {"deleted_count": int}
         """
         delete_filter = self._build_filter(filter_field, filter_value, exclude=exclude)
+        start = time.perf_counter()
         count_before = self.client.count(
             collection_name=self.collection,
             count_filter=delete_filter,
             exact=True,
         ).count
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
 
+        start = time.perf_counter()
         self.client.delete(
             collection_name=self.collection,
             points_selector=models.FilterSelector(
@@ -249,32 +264,40 @@ class QdrantService:
             ),
             wait=True,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
 
+        start = time.perf_counter()
         count_after = self.client.count(
             collection_name=self.collection,
             count_filter=delete_filter,
             exact=True,
         ).count
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         deleted = count_before - count_after
         logger.info("Deleted %d points from '%s'.", deleted, self.collection)
         return {"deleted_count": deleted}
 
     def count_by_filter(self, filter_field: str, filter_value: Any) -> int:
         """Count all points matching a metadata field/value pair."""
-        return self.client.count(
+        start = time.perf_counter()
+        count = self.client.count(
             collection_name=self.collection,
             count_filter=self._build_filter(filter_field, filter_value),
             exact=True,
         ).count
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
+        return count
 
     def delete_by_ids(self, point_ids: list[str]) -> dict:
         """Delete specific points by their IDs."""
         uuids = [self._to_uuid(pid) for pid in point_ids]
+        start = time.perf_counter()
         self.client.delete(
             collection_name=self.collection,
             points_selector=models.PointIdsList(points=uuids),
             wait=True,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         logger.info("Deleted %d points by ID.", len(uuids))
         return {"deleted_count": len(uuids)}
 
@@ -293,6 +316,7 @@ class QdrantService:
             if filter_field
             else None
         )
+        start = time.perf_counter()
         points, _ = self.client.scroll(
             collection_name=self.collection,
             scroll_filter=scroll_filter,
@@ -300,6 +324,7 @@ class QdrantService:
             with_payload=True,
             with_vectors=False,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         return [self._format_point(p) for p in points]
 
     # ------------------------------------------------------------------
@@ -358,6 +383,7 @@ class QdrantService:
         score_threshold: float | None,
     ) -> list[dict[str, Any]]:
         dense_vec = self.embedding_service.embed_query(query)
+        start = time.perf_counter()
         results = self.client.query_points(
             collection_name=self.collection,
             query=dense_vec,
@@ -367,6 +393,7 @@ class QdrantService:
             score_threshold=score_threshold,
             with_payload=True,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         return [self._format_scored(r) for r in results.points]
 
     def _search_sparse(
@@ -377,6 +404,7 @@ class QdrantService:
         score_threshold: float | None,
     ) -> list[dict[str, Any]]:
         sparse_vec = next(self.sparse_model.query_embed(query))
+        start = time.perf_counter()
         results = self.client.query_points(
             collection_name=self.collection,
             query=SparseVector(
@@ -389,6 +417,7 @@ class QdrantService:
             score_threshold=score_threshold,
             with_payload=True,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         return [self._format_scored(r) for r in results.points]
 
     def _search_hybrid(
@@ -402,6 +431,7 @@ class QdrantService:
         dense_vec = self.embedding_service.embed_query(query)
         sparse_vec = next(self.sparse_model.query_embed(query))
 
+        start = time.perf_counter()
         results = self.client.query_points(
             collection_name=self.collection,
             prefetch=[
@@ -426,6 +456,7 @@ class QdrantService:
             score_threshold=score_threshold,
             with_payload=True,
         )
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         return [self._format_scored(r) for r in results.points]
 
     # ------------------------------------------------------------------
@@ -435,10 +466,15 @@ class QdrantService:
     def health_check(self) -> dict:
         """Return collection status and point count."""
         try:
+            start = time.perf_counter()
             info = self.client.get_collection(self.collection)
+            MonitoringMetrics.record_qdrant_latency(
+                (time.perf_counter() - start) * 1000
+            )
             return {
                 "status": str(info.status),
                 "points_count": info.points_count,
+                "files_count": self.file_count(),
                 "collection": self.collection,
                 "healthy": info.status in [
                     models.CollectionStatus.GREEN,
@@ -451,7 +487,9 @@ class QdrantService:
 
     def collection_info(self) -> dict:
         """Return detailed collection stats."""
+        start = time.perf_counter()
         info = self.client.get_collection(self.collection)
+        MonitoringMetrics.record_qdrant_latency((time.perf_counter() - start) * 1000)
         vectors_count = getattr(info, "vectors_count", None)
         return {
             "collection": self.collection,
@@ -463,6 +501,31 @@ class QdrantService:
                 "retrieval_mode": self.settings.RETRIEVAL_MODE,
             },
         }
+
+    def file_count(self) -> int:
+        """Return the number of unique source files represented in Qdrant."""
+        sources: set[str] = set()
+        offset = None
+        while True:
+            start = time.perf_counter()
+            points, offset = self.client.scroll(
+                collection_name=self.collection,
+                offset=offset,
+                limit=1000,
+                with_payload=["source"],
+                with_vectors=False,
+            )
+            MonitoringMetrics.record_qdrant_latency(
+                (time.perf_counter() - start) * 1000
+            )
+            for point in points:
+                payload = getattr(point, "payload", None) or {}
+                source = payload.get("source")
+                if source:
+                    sources.add(str(source))
+            if offset is None:
+                break
+        return len(sources)
 
     def close(self) -> None:
         """Close the underlying Qdrant client if it supports explicit cleanup."""
