@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.core.dependencies import get_build_service
 from app.controllers.build_controller import BuildController
 from app.services.rag.rag_builder import BuildService
@@ -99,10 +100,11 @@ def fake_build_stack():
 @pytest.fixture
 def client(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
+    monkeypatch.setattr(settings, "API_KEY", "test-api-key")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
     app.dependency_overrides[get_build_service] = lambda: service
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-API-Key": "test-api-key"}) as test_client:
         yield test_client
     app.dependency_overrides.clear()
 
@@ -114,6 +116,34 @@ def test_file_upload_rejects_non_pdf_upload(client):
     )
 
     assert response.status_code == 415
+
+
+def test_protected_build_endpoint_rejects_missing_api_key(fake_build_stack, tmp_path, monkeypatch):
+    service, _, _ = fake_build_stack
+    monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
+    monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
+    app.dependency_overrides[get_build_service] = lambda: service
+    with TestClient(app) as test_client:
+        response = test_client.get("/files")
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or missing API key."
+
+
+def test_protected_build_endpoint_rejects_invalid_api_key(fake_build_stack, tmp_path, monkeypatch):
+    service, _, _ = fake_build_stack
+    monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
+    monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
+    app.dependency_overrides[get_build_service] = lambda: service
+    with TestClient(app) as test_client:
+        response = test_client.get("/files", headers={"X-API-Key": "wrong-key"})
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or missing API key."
 
 
 def test_file_lifecycle_endpoints_upload_build_list_get_and_delete(client, fake_build_stack):

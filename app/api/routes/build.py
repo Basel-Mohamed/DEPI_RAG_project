@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.core.auth import verify_api_key
 from app.core.dependencies import get_build_service
 from app.controllers.build_controller import BuildController
 from app.schemas.build import (
@@ -12,7 +13,7 @@ from app.schemas.build import (
 )
 from app.services.rag.rag_builder import BuildService
 
-router = APIRouter(tags=["build"])
+router = APIRouter(tags=["build"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
 
 

@@ -1,5 +1,19 @@
 # DEPI RAG Project
 
+## API Authentication
+
+Protected API routes require an `X-API-Key` header matching the `API_KEY` environment variable.
+
+```env
+API_KEY=replace-with-a-secret-value
+```
+
+Example request:
+
+```powershell
+curl.exe -H "X-API-Key: replace-with-a-secret-value" http://localhost:8000/files
+```
+
 ## Local Qdrant with Docker
 
 This project is configured to use a local Qdrant server over HTTP.
