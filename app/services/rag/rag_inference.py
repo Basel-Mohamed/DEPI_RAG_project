@@ -63,27 +63,21 @@ class RagInferencePipeline:
         *,
         top_k: int | None = None,
         mode: SearchMode | str | None = None,
-        filter_field: str | None = None,
-        filter_value: Any = None,
         score_threshold: float | None = None,
         include_sources: bool = True,
     ) -> GeneratedPayload:
         """Return a full non-streaming RAG response for ``question``."""
 
-        clean_question = question.strip()
-        if not clean_question:
-            return self.response_builder.empty_response(DEFAULT_FALLBACK_ANSWER)
-
-        documents = self.retrieve(
-            clean_question,
+        context = self._get_documents_or_fallback(
+            question,
             top_k=top_k,
             mode=mode,
-            filter_field=filter_field,
-            filter_value=filter_value,
             score_threshold=score_threshold,
         )
-        if not documents:
+        if context is None:
             return self.response_builder.empty_response(DEFAULT_FALLBACK_ANSWER)
+
+        clean_question, documents = context
 
         raw_answer = self.llm_service.generate(clean_question, documents)
 
@@ -100,8 +94,6 @@ class RagInferencePipeline:
         *,
         top_k: int | None = None,
         mode: SearchMode | str | None = None,
-        filter_field: str | None = None,
-        filter_value: Any = None,
         score_threshold: float | None = None,
     ) -> list[RetrievedContext]:
         """Retrieve and rerank context documents for the question."""
@@ -117,8 +109,6 @@ class RagInferencePipeline:
             query=clean_question,
             top_k=search_top_k,
             mode=mode,
-            filter_field=filter_field,
-            filter_value=filter_value,
             score_threshold=score_threshold,
         )
 
@@ -137,29 +127,22 @@ class RagInferencePipeline:
         *,
         top_k: int | None = None,
         mode: SearchMode | str | None = None,
-        filter_field: str | None = None,
-        filter_value: Any = None,
         score_threshold: float | None = None,
         include_sources: bool = True,
     ) -> Iterator[GeneratedPayload]:
         """Yield normalized answer deltas followed by source metadata."""
 
-        clean_question = question.strip()
-        if not clean_question:
+        context = self._get_documents_or_fallback(
+            question,
+            top_k=top_k,
+            mode=mode,
+            score_threshold=score_threshold,
+        )
+        if context is None:
             yield self.response_builder.empty_response(DEFAULT_FALLBACK_ANSWER)
             return
 
-        documents = self.retrieve(
-            clean_question,
-            top_k=top_k,
-            mode=mode,
-            filter_field=filter_field,
-            filter_value=filter_value,
-            score_threshold=score_threshold,
-        )
-        if not documents:
-            yield self.response_builder.empty_response(DEFAULT_FALLBACK_ANSWER)
-            return
+        clean_question, documents = context
 
         for raw_chunk in self.llm_service.stream(clean_question, documents):
             yield self.response_builder.build_delta(raw_chunk)
@@ -176,12 +159,30 @@ class RagInferencePipeline:
             "retrieval": self._retrieval_metadata(documents, mode),
         }
 
-    def close(self) -> None:
-        """Release resources held by the vector store."""
+    def _get_documents_or_fallback(
+        self,
+        question: str,
+        *,
+        top_k: int | None,
+        mode: SearchMode | str | None,
+        score_threshold: float | None,
+    ) -> tuple[str, list[RetrievedContext]] | None:
+        """Return a clean question and contexts, or ``None`` for fallback answers."""
 
-        close = getattr(self.vector_store, "close", None)
-        if callable(close):
-            close()
+        clean_question = question.strip()
+        if not clean_question:
+            return None
+
+        documents = self.retrieve(
+            clean_question,
+            top_k=top_k,
+            mode=mode,
+            score_threshold=score_threshold,
+        )
+        if not documents:
+            return None
+
+        return clean_question, documents
 
     def _rerank(
         self,

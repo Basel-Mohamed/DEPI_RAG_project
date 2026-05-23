@@ -1,30 +1,25 @@
 from __future__ import annotations
 
-import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from app.services.reranking.base_reranker import BaseRerankerService
+from app.services.reranking.base_reranker import BaseRerankerService, RerankerServiceError
 from app.services.reranking.providers.azure_reranker import AzureCohereRerankerService
 from app.services.reranking.providers.cohere_reranker import CohereRerankerService
 
 if TYPE_CHECKING:
     from app.core.config import Settings
 
-logger = logging.getLogger(__name__)
-
 
 class RerankerType(Enum):
     """Supported reranker types."""
+
     COHERE = "cohere"
     AZURE_COHERE = "azure_cohere"
 
 
 class RerankerFactory:
     """Factory class for creating reranker service instances."""
-
-    _singleton_service: BaseRerankerService | None = None
-    _singleton_config: tuple[Any, ...] | None = None
 
     @staticmethod
     def create_reranker(
@@ -52,36 +47,24 @@ class RerankerFactory:
                     f"Supported types: {[rt.value for rt in RerankerType]}"
                 )
 
-        config = RerankerFactory._build_config(reranker_type, **kwargs)
-        if RerankerFactory._singleton_service is not None:
-            if RerankerFactory._singleton_config != config:
-                raise ValueError(
-                    "Reranker singleton was already initialized with a different configuration."
-                )
-            return RerankerFactory._singleton_service
-
         if reranker_type == RerankerType.COHERE:
-            RerankerFactory._singleton_service = CohereRerankerService(
+            return CohereRerankerService(
                 api_key=kwargs["api_key"],
                 model_name=kwargs.get("model_name", "rerank-v3.5"),
                 top_n=kwargs.get("top_n"),
             )
-            RerankerFactory._singleton_config = config
-            return RerankerFactory._singleton_service
-        elif reranker_type == RerankerType.AZURE_COHERE:
-            RerankerFactory._singleton_service = AzureCohereRerankerService(
+        if reranker_type == RerankerType.AZURE_COHERE:
+            return AzureCohereRerankerService(
                 api_key=kwargs["api_key"],
                 base_url=kwargs["base_url"],
                 model_name=kwargs.get("model_name", "model"),
                 top_n=kwargs.get("top_n"),
             )
-            RerankerFactory._singleton_config = config
-            return RerankerFactory._singleton_service
-        else:
-            raise ValueError(
-                f"Unsupported reranker type: {reranker_type}. "
-                f"Supported types: {[rt.value for rt in RerankerType]}"
-            )
+
+        raise ValueError(
+            f"Unsupported reranker type: {reranker_type}. "
+            f"Supported types: {[rt.value for rt in RerankerType]}"
+        )
 
     @staticmethod
     def create_cohere_reranker(
@@ -134,30 +117,6 @@ class RerankerFactory:
             top_n=top_n,
         )
 
-    @staticmethod
-    def _build_config(
-        reranker_type: RerankerType,
-        **kwargs: Any,
-    ) -> tuple[Any, ...]:
-        if reranker_type == RerankerType.COHERE:
-            return (
-                reranker_type.value,
-                kwargs["api_key"],
-                kwargs.get("model_name", "rerank-v3.5"),
-                kwargs.get("top_n"),
-            )
-
-        if reranker_type == RerankerType.AZURE_COHERE:
-            return (
-                reranker_type.value,
-                kwargs["api_key"],
-                kwargs["base_url"],
-                kwargs.get("model_name", "model"),
-                kwargs.get("top_n"),
-            )
-
-        return (reranker_type.value,)
-
 
 def create_reranker_service(settings: Settings) -> BaseRerankerService | None:
     """Create the configured reranker service from application settings.
@@ -174,8 +133,9 @@ def create_reranker_service(settings: Settings) -> BaseRerankerService | None:
     if provider == RerankerType.COHERE.value:
         api_key = getattr(settings, "cohere_api_key", None)
         if not api_key:
-            logger.warning("Cohere reranker requested but COHERE_API_KEY is missing.")
-            return None
+            raise RerankerServiceError(
+                "Cohere reranker configuration is incomplete. Missing: COHERE_API_KEY"
+            )
         return RerankerFactory.create_cohere_reranker(
             api_key=api_key,
             model_name=getattr(settings, "cohere_rerank_model", "rerank-v3.5"),
@@ -185,15 +145,22 @@ def create_reranker_service(settings: Settings) -> BaseRerankerService | None:
         api_key = getattr(settings, "azure_cohere_api_key", None)
         base_url = getattr(settings, "azure_cohere_base_url", None)
         if not api_key or not base_url:
-            logger.warning(
-                "Azure Cohere reranker requested but API key or base URL is missing."
+            missing_fields = []
+            if not api_key:
+                missing_fields.append("AZURE_COHERE_API_KEY")
+            if not base_url:
+                missing_fields.append("AZURE_COHERE_BASE_URL")
+            raise RerankerServiceError(
+                "Azure Cohere reranker configuration is incomplete. Missing: "
+                + ", ".join(missing_fields)
             )
-            return None
         return RerankerFactory.create_azure_cohere_reranker(
             api_key=api_key,
             base_url=base_url,
             model_name=getattr(settings, "azure_cohere_model", "model"),
         )
 
-    logger.warning("Unsupported reranker provider '%s'; reranking disabled.", provider)
-    return None
+    raise RerankerServiceError(
+        "Unsupported reranker provider. Set RERANKER_PROVIDER to "
+        "'cohere', 'azure_cohere', or 'none'."
+    )

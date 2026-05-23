@@ -43,14 +43,10 @@ def test_rag_pipeline_retrieves_then_generates_answer() -> None:
         ),
     )
 
-    response = pipeline.run(
-        "How do refunds work?",
-        filter_field="source",
-        filter_value="policy.pdf",
-    )
+    response = pipeline.run("How do refunds work?")
 
     assert response["answer"] == "Refunds are available within 30 days."
     assert response["retrieval"] == {"documents": 1, "mode": "hybrid"}
     assert vector_store.last_kwargs["top_k"] == 3
-    assert vector_store.last_kwargs["filter_field"] == "source"
-    assert vector_store.last_kwargs["filter_value"] == "policy.pdf"
+    assert "filter_field" not in vector_store.last_kwargs
+    assert "filter_value" not in vector_store.last_kwargs

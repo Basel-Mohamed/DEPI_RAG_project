@@ -65,7 +65,7 @@ class BaseRerankerService(ABC):
             reverse=True,
         )
         normalized_documents = [
-            self._convert_to_retrieved_context(document, score=float(scores[index]))
+            self._with_rerank_score(document, score=float(scores[index]))
             for index, document in ranked_pairs
         ]
 
@@ -77,13 +77,14 @@ class BaseRerankerService(ABC):
             )
         return normalized_documents[:top_k]
 
-    def _convert_to_retrieved_context(
+    def _with_rerank_score(
         self,
         document: RetrievedContext,
         *,
         score: float | None = None,
     ) -> RetrievedContext:
-        """Convert document to RetrievedContext for output consistency."""
+        """Return a copy of the context with rerank score metadata."""
+
         metadata = dict(document.metadata or {})
         if score is not None:
             metadata = {**metadata, "rerank_score": score}
