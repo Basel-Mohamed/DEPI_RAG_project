@@ -18,3 +18,4 @@ qdrant_client
 mlflow
 ragas
 evidently
+azure-storage-blob

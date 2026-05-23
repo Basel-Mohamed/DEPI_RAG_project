@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import UploadFile
 
+from app.services.artifacts import artifact_store
 from app.services.rag.rag_builder import BuildService
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ class BuildController:
     registry_path = upload_root / "files.json"
     registry_lock = threading.RLock()
     max_upload_bytes = 50 * 1024 * 1024
+    artifact_store = artifact_store
 
     def __init__(self, build_service: BuildService) -> None:
         self.build_service = build_service
@@ -37,6 +39,10 @@ class BuildController:
         logger.info("file upload save started file_id=%s filename=%s", file_id, file.filename)
         self._save_upload(file, stored_path)
         self._validate_pdf_file(stored_path)
+        object_name = f"uploads/{file_id}{suffix}"
+        storage_uri = self.artifact_store.put_file(stored_path, object_name)
+        if self._is_remote_storage_uri(storage_uri):
+            stored_path.unlink(missing_ok=True)
 
         now = self._utc_now()
         metadata = {
@@ -44,6 +50,7 @@ class BuildController:
             "filename": file.filename,
             "content_type": file.content_type,
             "path": str(stored_path),
+            "storage_uri": storage_uri,
             "status": "uploaded",
             "chunks_count": 0,
             "upserted": 0,
@@ -67,6 +74,20 @@ class BuildController:
         results = []
         for metadata in files:
             path = Path(metadata["path"])
+            restored_from_remote = False
+            if not path.exists():
+                storage_uri = metadata.get("storage_uri")
+                if storage_uri:
+                    try:
+                        self.artifact_store.get_file(storage_uri, path)
+                        restored_from_remote = self._is_remote_storage_uri(storage_uri)
+                    except Exception:
+                        logger.exception(
+                            "file cache restore failed file_id=%s storage_uri=%s",
+                            metadata["file_id"],
+                            storage_uri,
+                        )
+
             if not path.exists():
                 metadata["status"] = "missing"
                 metadata["updated_at"] = self._utc_now()
@@ -92,6 +113,9 @@ class BuildController:
                     registry[metadata["file_id"]] = metadata
                     self._write_registry(registry)
                 raise
+            finally:
+                if restored_from_remote:
+                    path.unlink(missing_ok=True)
 
             metadata.update(
                 {
@@ -154,6 +178,7 @@ class BuildController:
                 continue
             metadata = self._get_file_or_raise(registry, target_id)
             deleted_count += self.build_service.delete_document(target_id)["deleted_count"]
+            self.artifact_store.delete_file(metadata.get("storage_uri"))
             Path(metadata["path"]).unlink(missing_ok=True)
             registry.pop(target_id, None)
             files_deleted += 1
@@ -222,6 +247,10 @@ class BuildController:
         if signature != b"%PDF-":
             path.unlink(missing_ok=True)
             raise ValueError("Only valid PDF documents are supported.")
+
+    @staticmethod
+    def _is_remote_storage_uri(storage_uri: str | None) -> bool:
+        return bool(storage_uri and storage_uri.startswith("azure-blob://"))
 
     @staticmethod
     def _utc_now() -> str:

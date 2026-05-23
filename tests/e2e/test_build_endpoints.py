@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -85,6 +86,26 @@ class FakeVectorStore:
         )
 
 
+class FakeArtifactStore:
+    def __init__(self) -> None:
+        self.puts: list[tuple[Path, str]] = []
+        self.downloads: list[tuple[str, Path]] = []
+        self.deletes: list[str | None] = []
+
+    def put_file(self, local_path: str | Path, object_name: str) -> str:
+        self.puts.append((Path(local_path), object_name))
+        return f"azure-blob://test-container/{object_name}"
+
+    def get_file(self, storage_uri: str | None, destination_path: str | Path) -> Path:
+        destination = Path(destination_path)
+        self.downloads.append((storage_uri or "", destination))
+        destination.write_bytes(b"%PDF-1.4 restored pdf bytes")
+        return destination
+
+    def delete_file(self, storage_uri: str | None) -> None:
+        self.deletes.append(storage_uri)
+
+
 @pytest.fixture
 def fake_build_stack():
     processor = FakeDocumentProcessor()
@@ -101,6 +122,7 @@ def fake_build_stack():
 def client(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "ARTIFACT_STORAGE_BACKEND", "local")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
     app.dependency_overrides[get_build_service] = lambda: service
@@ -121,6 +143,7 @@ def test_file_upload_rejects_non_pdf_upload(client):
 def test_protected_build_endpoint_rejects_missing_api_key(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "ARTIFACT_STORAGE_BACKEND", "local")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
     app.dependency_overrides[get_build_service] = lambda: service
@@ -135,6 +158,7 @@ def test_protected_build_endpoint_rejects_missing_api_key(fake_build_stack, tmp_
 def test_protected_build_endpoint_rejects_invalid_api_key(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "ARTIFACT_STORAGE_BACKEND", "local")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
     app.dependency_overrides[get_build_service] = lambda: service
@@ -197,6 +221,46 @@ def test_file_lifecycle_endpoints_upload_build_list_get_and_delete(client, fake_
         "files_deleted": 1,
     }
     assert vector_store.points == []
+
+
+def test_file_upload_persists_pdf_to_artifact_store(fake_build_stack, tmp_path, monkeypatch):
+    service, _, _ = fake_build_stack
+    fake_store = FakeArtifactStore()
+    registry_path = tmp_path / "uploads" / "files.json"
+    monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
+    monkeypatch.setattr(BuildController, "registry_path", registry_path)
+    monkeypatch.setattr(BuildController, "artifact_store", fake_store)
+    app.dependency_overrides[get_build_service] = lambda: service
+
+    with TestClient(app, headers={"X-API-Key": "test-api-key"}) as test_client:
+        upload_response = test_client.post(
+            "/files",
+            files={"file": ("sample.pdf", b"%PDF-1.4 fake pdf bytes", "application/pdf")},
+        )
+        assert upload_response.status_code == 201
+        file_id = upload_response.json()["file_id"]
+        cached_path = tmp_path / "uploads" / f"{file_id}.pdf"
+        assert not cached_path.exists()
+
+        build_response = test_client.post(f"/files/build?file_id={file_id}")
+    app.dependency_overrides.clear()
+
+    assert fake_store.puts == [
+        (tmp_path / "uploads" / f"{file_id}.pdf", f"uploads/{file_id}.pdf")
+    ]
+    assert build_response.status_code == 200
+    assert not cached_path.exists()
+    assert fake_store.downloads == [
+        (
+            f"azure-blob://test-container/uploads/{file_id}.pdf",
+            tmp_path / "uploads" / f"{file_id}.pdf",
+        )
+    ]
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    assert registry[file_id]["storage_uri"] == (
+        f"azure-blob://test-container/uploads/{file_id}.pdf"
+    )
 
 
 def test_build_status_counts_more_than_default_scroll_limit(client, fake_build_stack):

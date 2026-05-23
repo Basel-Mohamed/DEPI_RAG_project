@@ -45,6 +45,18 @@ Get the satisfaction KPI:
 curl.exe -H "X-API-Key: replace-with-a-secret-value" http://localhost:8000/feedback/satisfaction
 ```
 
+## Azure Blob Artifact Storage
+
+Uploaded PDFs are stored locally by default. To persist uploaded files in Azure Blob Storage, set:
+
+```env
+ARTIFACT_STORAGE_BACKEND=azure_blob
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=...
+AZURE_BLOB_CONTAINER=rag-artifacts
+```
+
+The API keeps a local working copy for document processing and stores the durable artifact URI in `uploads/files.json`.
+
 ## Local Qdrant with Docker
 
 This project is configured to use a local Qdrant server over HTTP.
