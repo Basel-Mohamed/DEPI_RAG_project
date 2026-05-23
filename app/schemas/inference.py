@@ -35,14 +35,6 @@ class ContentBlock(BaseModel):
     text: str | None = None
 
 
-class MediaPayload(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    type: str
-    url: str | None = None
-    source_id: str | None = None
-
-
 class SourcePayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -51,7 +43,6 @@ class SourcePayload(BaseModel):
     title: str
     content: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    media: list[MediaPayload] = Field(default_factory=list)
 
 
 class InferenceResponse(BaseModel):

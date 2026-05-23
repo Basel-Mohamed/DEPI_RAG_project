@@ -23,11 +23,11 @@ class FakeDocumentProcessor:
             },
         ]
 
-    def process_document(self, file_path: str | Path) -> tuple[list[dict], dict[int, bytes]]:
+    def process_document(self, file_path: str | Path) -> list[dict]:
         path = Path(file_path)
         assert path.exists()
         self.seen_paths.append(path)
-        return ([{**chunk, "metadata": dict(chunk["metadata"])} for chunk in self.chunks], {1: b"image-bytes"})
+        return [{**chunk, "metadata": dict(chunk["metadata"])} for chunk in self.chunks]
 
 
 class FakeEmbeddingService:
@@ -142,8 +142,6 @@ def test_file_lifecycle_endpoints_upload_build_list_get_and_delete(client, fake_
             "content_type": "application/pdf",
             "status": "built",
             "chunks_count": 2,
-            "page_images_count": 1,
-            "chunks_with_page_images_count": 2,
             "upserted": 2,
             "failed": 0,
             "last_error": None,

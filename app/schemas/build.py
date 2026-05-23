@@ -24,8 +24,6 @@ class FileStatusResponse(BaseModel):
     content_type: str | None = None
     status: FileBuildStatus
     chunks_count: int = Field(ge=0)
-    page_images_count: int = Field(default=0, ge=0)
-    chunks_with_page_images_count: int = Field(default=0, ge=0)
     upserted: int = Field(default=0, ge=0)
     failed: int = Field(default=0, ge=0)
     last_error: str | None = None

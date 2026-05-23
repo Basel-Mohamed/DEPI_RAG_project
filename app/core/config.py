@@ -15,12 +15,6 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 200
 
     # ------------------------------------------------------------------
-    # Image extraction
-    # ------------------------------------------------------------------
-    IMAGE_SCALE: float = 2.0
-    IMAGE_FORMAT: str = "PNG"
-
-    # ------------------------------------------------------------------
     # Embedding
     # ------------------------------------------------------------------
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large"

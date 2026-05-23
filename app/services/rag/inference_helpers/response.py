@@ -5,7 +5,6 @@ from collections.abc import Mapping
 from typing import Any
 
 from app.services.llm.providers.base_llm import DEFAULT_FALLBACK_ANSWER
-from app.services.media import MediaExtractor
 from app.services.types import RetrievedContext
 
 GeneratedPayload = dict[str, Any]
@@ -14,13 +13,6 @@ SourcePayload = dict[str, Any]
 
 class RagResponseBuilder:
     """Build normalized RAG responses and source metadata."""
-
-    def __init__(
-        self,
-        *,
-        media_extractor: MediaExtractor | None = None,
-    ) -> None:
-        self.media_extractor = media_extractor or MediaExtractor()
 
     def build(
         self,
@@ -64,10 +56,6 @@ class RagResponseBuilder:
                     "title": document.title,
                     "content": document.content,
                     "metadata": self.json_safe_metadata(document.metadata),
-                    "media": self.media_extractor.extract(
-                        document.metadata,
-                        source_id=document.id,
-                    ),
                 }
             )
         return sources
@@ -88,8 +76,18 @@ class RagResponseBuilder:
 
         safe: dict[str, Any] = {}
         for key, value in metadata.items():
+            if RagResponseBuilder._is_image_metadata_key(key):
+                continue
             if isinstance(value, bytes):
                 safe[key] = base64.b64encode(value).decode("ascii")
             else:
                 safe[key] = value
         return safe
+
+    @staticmethod
+    def _is_image_metadata_key(key: str) -> bool:
+        normalized = key.lower()
+        return any(
+            token in normalized
+            for token in ("image", "images", "media", "attachment")
+        )

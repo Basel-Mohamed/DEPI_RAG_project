@@ -29,7 +29,7 @@ class FixedVectorStore:
         ]
 
 
-class FixedImageVectorStore:
+class FixedLegacyImageMetadataVectorStore:
     def search(self, **_: Any) -> list[dict[str, Any]]:
         red_square_png = (
             "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4n"
@@ -113,30 +113,27 @@ def test_rag_pipeline_calls_real_llm_and_returns_grounded_answer() -> None:
 
 
 @pytest.mark.integration
-def test_rag_pipeline_calls_real_azure_vision_with_retrieved_image() -> None:
+def test_rag_pipeline_ignores_legacy_image_metadata() -> None:
     if os.getenv("RUN_REAL_LLM_TESTS") != "1":
         pytest.skip("Set RUN_REAL_LLM_TESTS=1 to call the configured LLM API.")
 
     settings = _real_llm_settings()
-    if settings.llm_provider.lower() != "azure":
-        pytest.skip("This multimodal integration test currently targets Azure gpt-4o.")
-
     pipeline = RagInferencePipeline(
-        vector_store=FixedImageVectorStore(),
+        vector_store=FixedLegacyImageMetadataVectorStore(),
         llm_service=create_llm_service(settings),
         settings=settings,
     )
 
     try:
         response = pipeline.run(
-            "What is the dominant color of the attached page image? "
-            "Answer with one color word only."
+            "What does the support policy say?"
         )
     except Exception:
         pytest.fail(
-            "The real Azure vision request failed. Check network access and LLM credentials.",
+            "The real LLM request failed. Check network access and LLM credentials.",
             pytrace=False,
         )
 
-    assert "red" in response["answer"].lower()
-    assert response["sources"][0]["media"][0]["url"].startswith("data:image/png;base64,")
+    assert response["answer"].strip()
+    assert "media" not in response["sources"][0]
+    assert "page_image_base64" not in response["sources"][0]["metadata"]

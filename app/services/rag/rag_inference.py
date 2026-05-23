@@ -9,7 +9,6 @@ from app.services.llm.providers.base_llm import (
     DEFAULT_FALLBACK_ANSWER,
     BaseLlmService,
 )
-from app.services.media import MediaExtractor
 from app.services.rag.inference_helpers.response import RagResponseBuilder
 from app.services.rag.inference_helpers.retrieval import RetrievalPolicy
 from app.services.types import RetrievedContext
@@ -27,9 +26,8 @@ class RagInferencePipeline:
     """Orchestrate retrieval, optional reranking, and LLM generation.
 
     The heavy formatting details live in helper classes:
-    ``RetrievalPolicy`` handles result conversion and visual-context rules,
-    ``RagResponseBuilder`` handles source payloads and LLM output normalization,
-    and ``MediaExtractor`` handles image/media metadata.
+    ``RetrievalPolicy`` handles result conversion and text-context rules, and
+    ``RagResponseBuilder`` handles source payloads and LLM output normalization.
     """
 
     def __init__(
@@ -61,7 +59,6 @@ class RagInferencePipeline:
 
             llm_service = create_llm_service(self.settings)
 
-        media_extractor = MediaExtractor()
         self.vector_store = vector_store
         self.llm_service = llm_service
         if reranker is None:
@@ -70,10 +67,8 @@ class RagInferencePipeline:
             reranker = create_reranker_service(self.settings)
 
         self.reranker = reranker
-        self.retrieval_policy = retrieval_policy or RetrievalPolicy(media_extractor)
-        self.response_builder = response_builder or RagResponseBuilder(
-            media_extractor=media_extractor
-        )
+        self.retrieval_policy = retrieval_policy or RetrievalPolicy()
+        self.response_builder = response_builder or RagResponseBuilder()
 
     def run(
         self,
@@ -159,12 +154,6 @@ class RagInferencePipeline:
             top_k=final_top_k,
         )
 
-        if self.retrieval_policy.is_visual_question(clean_question):
-            return self.retrieval_policy.ensure_visual_context(
-                ranked_documents,
-                retrieved_documents,
-                top_k=final_top_k,
-            )
         return ranked_documents
 
     def stream(
