@@ -98,6 +98,7 @@ The `.env` file points local Python runs at Qdrant on `localhost:6333`:
 QDRANT_REMOTE=True
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
+QDRANT_API_KEY=
 ```
 
 Inside Docker Compose, the API service overrides `QDRANT_HOST` to `qdrant`, which is the service name on the Compose network.

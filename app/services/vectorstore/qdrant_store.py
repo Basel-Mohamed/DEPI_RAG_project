@@ -85,8 +85,13 @@ class QdrantService:
                     host=self.settings.QDRANT_HOST,
                     port=self.settings.QDRANT_PORT,
                     prefer_grpc=self.settings.QDRANT_PREFER_GRPC,
+                    api_key=self.settings.QDRANT_API_KEY,
                 )
-                logger.info("Connected to remote Qdrant at %s:%s", self.settings.QDRANT_HOST, self.settings.QDRANT_PORT)
+                logger.info(
+                    "Connected to remote Qdrant at %s:%s",
+                    self.settings.QDRANT_HOST,
+                    self.settings.QDRANT_PORT,
+                )
             else:
                 client = QdrantClient(path=self.settings.QDRANT_PATH)
                 logger.info("Connected to local Qdrant at %s", self.settings.QDRANT_PATH)

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_PREFER_GRPC: bool = False
+    QDRANT_API_KEY: str | None = None
     QDRANT_PATH: str = "./qdrant_storage"       # used only when QDRANT_REMOTE=False
 
     # ------------------------------------------------------------------
@@ -104,4 +105,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-
