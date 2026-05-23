@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import logging
-import os
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -10,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.feedback import FeedbackRequest
+from app.services.metadata_store import get_metadata_store
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +38,7 @@ class FeedbackController:
             record["rating"],
         )
         with self.feedback_lock:
-            feedback = self._read_feedback()
-            feedback.append(record)
-            self._write_feedback(feedback)
+            self._write_feedback(record)
         logger.info("feedback persist completed feedback_id=%s", feedback_id)
 
         return {
@@ -100,20 +97,10 @@ class FeedbackController:
         }
 
     def _read_feedback(self) -> list[dict[str, Any]]:
-        if not self.feedback_path.exists():
-            return []
-        with self.feedback_path.open("r", encoding="utf-8") as file:
-            data = json.load(file)
-        if not isinstance(data, list):
-            raise ValueError("Feedback store is corrupted.")
-        return data
+        return get_metadata_store().read_feedback(self.feedback_path)
 
-    def _write_feedback(self, feedback: list[dict[str, Any]]) -> None:
-        self.feedback_root.mkdir(parents=True, exist_ok=True)
-        temp_path = self.feedback_path.with_suffix(f".{uuid.uuid4().hex}.tmp")
-        with temp_path.open("w", encoding="utf-8") as file:
-            json.dump(feedback, file, indent=2, sort_keys=True)
-        os.replace(temp_path, self.feedback_path)
+    def _write_feedback(self, record: dict[str, Any]) -> None:
+        get_metadata_store().append_feedback(record, self.feedback_path)
 
     @staticmethod
     def _validate_record(record: dict[str, Any]) -> None:

@@ -55,7 +55,25 @@ AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=...
 AZURE_BLOB_CONTAINER=rag-artifacts
 ```
 
-The API keeps a local working copy for document processing and stores the durable artifact URI in `uploads/files.json`.
+The API keeps a local working copy for document processing and stores the durable artifact URI in the configured metadata backend.
+
+## Metadata Storage
+
+File registry metadata and feedback records are stored in SQLite by default:
+
+```env
+METADATA_BACKEND=sqlite
+METADATA_DB_PATH=uploads/app_metadata.sqlite3
+```
+
+For Azure SQL, install the ODBC driver on the host and set:
+
+```env
+METADATA_BACKEND=azure_sql
+AZURE_SQL_CONNECTION_STRING=Driver={ODBC Driver 18 for SQL Server};Server=tcp:<server>.database.windows.net,1433;Database=<database>;Uid=<user>;Pwd=<password>;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
+```
+
+Use `METADATA_BACKEND=json` only when you need the legacy `uploads/files.json` and `feedback/feedback.json` files.
 
 ## Local Qdrant with Docker
 

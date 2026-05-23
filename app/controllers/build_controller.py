@@ -1,6 +1,4 @@
 import logging
-import json
-import os
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -10,6 +8,7 @@ from typing import Any
 from fastapi import UploadFile
 
 from app.services.artifacts import artifact_store
+from app.services.metadata_store import get_metadata_store
 from app.services.rag.rag_builder import BuildService
 
 logger = logging.getLogger(__name__)
@@ -192,17 +191,10 @@ class BuildController:
         }
 
     def _read_registry(self) -> dict[str, dict[str, Any]]:
-        if not self.registry_path.exists():
-            return {}
-        with self.registry_path.open("r", encoding="utf-8") as file:
-            return json.load(file)
+        return get_metadata_store().read_file_registry(self.registry_path)
 
     def _write_registry(self, registry: dict[str, dict[str, Any]]) -> None:
-        self.upload_root.mkdir(parents=True, exist_ok=True)
-        temp_path = self.registry_path.with_suffix(f".{uuid.uuid4().hex}.tmp")
-        with temp_path.open("w", encoding="utf-8") as file:
-            json.dump(registry, file, indent=2, sort_keys=True)
-        os.replace(temp_path, self.registry_path)
+        get_metadata_store().write_file_registry(registry, self.registry_path)
 
     @staticmethod
     def _get_file_or_raise(registry: dict[str, dict[str, Any]], file_id: str | None) -> dict[str, Any]:

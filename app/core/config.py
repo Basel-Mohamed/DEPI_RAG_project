@@ -69,8 +69,11 @@ class Settings(BaseSettings):
     RAG_RETRIEVAL_TOP_K: int = 10
 
     # ------------------------------------------------------------------
-    # Artifact storage
+    # Metadata and artifact storage
     # ------------------------------------------------------------------
+    METADATA_BACKEND: str = "sqlite"  # "json", "sqlite", or "azure_sql"
+    METADATA_DB_PATH: str = "uploads/app_metadata.sqlite3"
+    AZURE_SQL_CONNECTION_STRING: str | None = None
     ARTIFACT_STORAGE_BACKEND: str = "local"  # "local" or "azure_blob"
     AZURE_STORAGE_CONNECTION_STRING: str | None = None
     AZURE_BLOB_CONTAINER: str = "rag-artifacts"

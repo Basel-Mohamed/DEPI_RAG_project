@@ -11,6 +11,7 @@ from main import app
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "METADATA_BACKEND", "json")
     monkeypatch.setattr(FeedbackController, "feedback_root", tmp_path / "feedback")
     monkeypatch.setattr(
         FeedbackController,
@@ -167,6 +168,7 @@ def test_feedback_satisfaction_endpoint_handles_empty_feedback(client):
 
 def test_feedback_endpoint_rejects_missing_api_key(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "METADATA_BACKEND", "json")
     monkeypatch.setattr(FeedbackController, "feedback_root", tmp_path / "feedback")
     monkeypatch.setattr(
         FeedbackController,

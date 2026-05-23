@@ -19,3 +19,4 @@ mlflow
 ragas
 evidently
 azure-storage-blob
+pyodbc

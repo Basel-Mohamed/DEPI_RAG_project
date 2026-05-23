@@ -122,6 +122,7 @@ def fake_build_stack():
 def client(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "METADATA_BACKEND", "json")
     monkeypatch.setattr(settings, "ARTIFACT_STORAGE_BACKEND", "local")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
@@ -143,6 +144,7 @@ def test_file_upload_rejects_non_pdf_upload(client):
 def test_protected_build_endpoint_rejects_missing_api_key(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "METADATA_BACKEND", "json")
     monkeypatch.setattr(settings, "ARTIFACT_STORAGE_BACKEND", "local")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
@@ -158,6 +160,7 @@ def test_protected_build_endpoint_rejects_missing_api_key(fake_build_stack, tmp_
 def test_protected_build_endpoint_rejects_invalid_api_key(fake_build_stack, tmp_path, monkeypatch):
     service, _, _ = fake_build_stack
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "METADATA_BACKEND", "json")
     monkeypatch.setattr(settings, "ARTIFACT_STORAGE_BACKEND", "local")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", tmp_path / "uploads" / "files.json")
@@ -228,6 +231,7 @@ def test_file_upload_persists_pdf_to_artifact_store(fake_build_stack, tmp_path, 
     fake_store = FakeArtifactStore()
     registry_path = tmp_path / "uploads" / "files.json"
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "METADATA_BACKEND", "json")
     monkeypatch.setattr(BuildController, "upload_root", tmp_path / "uploads")
     monkeypatch.setattr(BuildController, "registry_path", registry_path)
     monkeypatch.setattr(BuildController, "artifact_store", fake_store)
