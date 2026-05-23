@@ -8,11 +8,20 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        ca-certificates \
         curl \
+        gnupg \
         libglib2.0-0 \
         libgl1 \
         libgomp1 \
         libxcb1 \
+        unixodbc \
+        unixodbc-dev \
+    && curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

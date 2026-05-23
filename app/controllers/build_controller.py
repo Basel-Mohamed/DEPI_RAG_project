@@ -225,16 +225,23 @@ class BuildController:
             cls.building_file_ids.discard(file_id)
 
     def _read_registry(self) -> dict[str, dict[str, Any]]:
-        if self._use_sqlite_registry():
+        backend = self._metadata_backend()
+        if backend == "sqlite":
             return self._read_sqlite_registry()
+        if backend == "azure_sql":
+            return self._read_azure_sql_registry()
         if not self.registry_path.exists():
             return {}
         with self.registry_path.open("r", encoding="utf-8") as file:
             return json.load(file)
 
     def _write_registry(self, registry: dict[str, dict[str, Any]]) -> None:
-        if self._use_sqlite_registry():
+        backend = self._metadata_backend()
+        if backend == "sqlite":
             self._write_sqlite_registry(registry)
+            return
+        if backend == "azure_sql":
+            self._write_azure_sql_registry(registry)
             return
         self.upload_root.mkdir(parents=True, exist_ok=True)
         temp_path = self.registry_path.with_suffix(f".{uuid.uuid4().hex}.tmp")
@@ -243,8 +250,11 @@ class BuildController:
         os.replace(temp_path, self.registry_path)
 
     @staticmethod
-    def _use_sqlite_registry() -> bool:
-        return settings.METADATA_BACKEND.lower() == "sqlite"
+    def _metadata_backend() -> str:
+        backend = settings.METADATA_BACKEND.lower()
+        if backend not in {"sqlite", "azure_sql", "json"}:
+            raise ValueError("Unsupported METADATA_BACKEND. Use 'sqlite', 'azure_sql', or 'json'.")
+        return backend
 
     def _sqlite_registry_path(self) -> Path:
         configured = Path(settings.METADATA_DB_PATH)
@@ -286,6 +296,62 @@ class BuildController:
                     for file_id, payload in registry.items()
                 ],
             )
+
+    def _connect_azure_sql_registry(self):
+        if not settings.AZURE_SQL_CONNECTION_STRING:
+            raise RuntimeError("AZURE_SQL_CONNECTION_STRING is required for Azure SQL metadata storage.")
+
+        try:
+            import pyodbc
+        except ImportError as exc:
+            raise RuntimeError("The 'pyodbc' package is required for Azure SQL metadata storage.") from exc
+
+        connection = pyodbc.connect(settings.AZURE_SQL_CONNECTION_STRING)
+        connection.execute(
+            """
+            IF OBJECT_ID(N'dbo.file_registry', N'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.file_registry (
+                    file_id NVARCHAR(100) NOT NULL PRIMARY KEY,
+                    payload NVARCHAR(MAX) NOT NULL,
+                    updated_at NVARCHAR(50) NOT NULL
+                )
+            END
+            """
+        )
+        connection.commit()
+        return connection
+
+    def _read_azure_sql_registry(self) -> dict[str, dict[str, Any]]:
+        connection = self._connect_azure_sql_registry()
+        try:
+            rows = connection.execute("SELECT file_id, payload FROM dbo.file_registry").fetchall()
+            return {file_id: json.loads(payload) for file_id, payload in rows}
+        finally:
+            connection.close()
+
+    def _write_azure_sql_registry(self, registry: dict[str, dict[str, Any]]) -> None:
+        now = self._utc_now()
+        connection = self._connect_azure_sql_registry()
+        try:
+            cursor = connection.cursor()
+            cursor.execute("DELETE FROM dbo.file_registry")
+            cursor.executemany(
+                """
+                INSERT INTO dbo.file_registry (file_id, payload, updated_at)
+                VALUES (?, ?, ?)
+                """,
+                [
+                    (file_id, json.dumps(payload, sort_keys=True), now)
+                    for file_id, payload in registry.items()
+                ],
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     @staticmethod
     def _get_file_or_raise(registry: dict[str, dict[str, Any]], file_id: str | None) -> dict[str, Any]:

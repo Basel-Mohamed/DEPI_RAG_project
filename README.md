@@ -1,6 +1,6 @@
 # DEPI RAG Customer Support Chatbot
 
-Production-oriented FastAPI RAG service for customer support automation. It ingests user-provided PDFs, preprocesses them into chunks, builds dense/sparse Qdrant indexes, answers questions with a configured LLM provider, stores metadata in SQLite by default, can mirror artifacts to MinIO, exposes Grafana/Prometheus-friendly monitoring metrics, supports API-key auth, and includes Azure App Service deployment assets.
+Production-oriented FastAPI RAG service for customer support automation. It ingests user-provided PDFs, preprocesses them into chunks, builds dense/sparse Qdrant indexes, answers questions with a configured LLM provider, stores metadata in SQLite or Azure SQL, can mirror artifacts to Azure Blob or MinIO, exposes Grafana/Prometheus-friendly monitoring metrics, supports API-key auth, and includes Azure App Service deployment assets.
 
 ## Local Run
 
@@ -35,12 +35,13 @@ X-API-Key: <API_KEY>
 ## Storage And Jobs
 
 - Metadata uses SQLite by default: `METADATA_BACKEND=sqlite`, `METADATA_DB_PATH=uploads/app_metadata.sqlite3`.
+- Azure SQL metadata is enabled with `METADATA_BACKEND=azure_sql` and `AZURE_SQL_CONNECTION_STRING`.
 - `METADATA_BACKEND=json` is still available for tiny local experiments.
 - Azure Blob artifact mirroring is enabled with `ARTIFACT_STORAGE_BACKEND=azure_blob`,
   `AZURE_STORAGE_CONNECTION_STRING`, and `AZURE_BLOB_CONTAINER`.
 - MinIO/S3-compatible artifact mirroring is still available for local/self-hosted setups with
   `ARTIFACT_STORAGE_BACKEND=minio` plus `MINIO_*` settings.
-- The current build job model is intentionally simple for one-admin operation: upload records metadata, build marks the file `building`, FastAPI runs one in-app background build, and SQLite persists the status.
+- The current build job model is intentionally simple for one-admin operation: upload records metadata, build marks the file `building`, FastAPI runs one in-app background build, and the configured metadata backend persists the status.
 - For multi-admin or high-volume production, replace the in-app background job with a real queue/worker.
 
 ## Azure Deployment
@@ -82,4 +83,4 @@ Milestone docs live under `docs/`:
 
 ## Production Notes
 
-The current one-admin deployment path uses SQLite plus local/MinIO artifacts. For multi-instance production, move metadata to PostgreSQL and use MinIO or Azure Blob as the shared artifact store. Grafana can scrape `/monitoring/prometheus` through Prometheus; Azure Monitor/Application Insights remains the recommended Azure-native option.
+The current one-admin deployment path can use SQLite locally and Azure SQL plus Azure Blob in Azure. Grafana can scrape `/monitoring/prometheus` through Prometheus; Azure Monitor/Application Insights remains the recommended Azure-native option.

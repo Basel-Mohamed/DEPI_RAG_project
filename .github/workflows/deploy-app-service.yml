@@ -3,7 +3,7 @@ name: Deploy FastAPI to Azure App Service
 on:
   push:
     branches:
-      - inference_pipeline
+      - azure_service
   workflow_dispatch:
 
 env:

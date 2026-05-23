@@ -23,8 +23,8 @@ QDRANT_API_KEY=<qdrant-cloud-api-key>
 LLM_PROVIDER=cohere
 COHERE_API_KEY=<cohere-key>
 MLFLOW_TRACKING_URI=file:./mlruns
-METADATA_BACKEND=sqlite
-METADATA_DB_PATH=uploads/app_metadata.sqlite3
+METADATA_BACKEND=azure_sql
+AZURE_SQL_CONNECTION_STRING=<azure-sql-odbc-connection-string>
 ARTIFACT_STORAGE_BACKEND=azure_blob
 AZURE_STORAGE_CONNECTION_STRING=<storage-account-connection-string>
 AZURE_BLOB_CONTAINER=rag-artifacts
@@ -51,10 +51,25 @@ Azure Blob artifact storage:
    `AZURE_BLOB_CONTAINER=rag-artifacts` to App Service application settings.
 5. Restart the App Service.
 
+Azure SQL metadata storage:
+
+1. Create an Azure SQL Database.
+2. In the SQL Database resource, open **Settings → Connection strings** and copy the ODBC connection string.
+3. Replace `{your_password}` in the string with the SQL admin password you set during database creation.
+4. Add `METADATA_BACKEND=azure_sql` and `AZURE_SQL_CONNECTION_STRING` to App Service application settings.
+5. In the SQL Server networking/firewall settings, allow the App Service outbound IPs or temporarily enable Azure services access for testing.
+6. Restart the App Service.
+
+Expected connection string shape:
+
+```text
+Driver={ODBC Driver 18 for SQL Server};Server=tcp:<server>.database.windows.net,1433;Database=<database>;Uid=<user>;Pwd=<password>;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
+```
+
 Production upgrade path:
 
 - Use Azure Blob Storage for uploaded source files and other durable artifacts.
-- For one-admin deployments, SQLite metadata is acceptable. For multi-instance production, move metadata to PostgreSQL.
+- Use Azure SQL for metadata when App Service storage is not enough or when you plan to run more than one API instance.
 - MinIO is a valid S3-compatible artifact store if you do not want Azure Blob Storage.
 - Send logs/metrics to Application Insights or Azure Monitor.
 - Use Azure Key Vault references for API keys and provider credentials.

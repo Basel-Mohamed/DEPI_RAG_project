@@ -21,8 +21,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Metadata and artifact storage
     # ------------------------------------------------------------------
-    METADATA_BACKEND: str = "sqlite"            # "sqlite" or "json"
+    METADATA_BACKEND: str = "sqlite"            # "sqlite", "azure_sql", or "json"
     METADATA_DB_PATH: str = "uploads/app_metadata.sqlite3"
+    AZURE_SQL_CONNECTION_STRING: str | None = None
     ARTIFACT_STORAGE_BACKEND: str = "local"     # "local", "minio", or "azure_blob"
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str | None = None
