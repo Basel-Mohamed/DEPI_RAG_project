@@ -48,6 +48,12 @@ class ArtifactStore:
         blob_client = self._azure_blob_client(container, object_name)
         try:
             blob_client.delete_blob()
+        except self._azure_resource_not_found_error():
+            logger.info(
+                "artifact blob already missing object=%s container=%s",
+                object_name,
+                container,
+            )
         except Exception:
             logger.exception(
                 "failed to delete artifact object=%s container=%s",
@@ -107,6 +113,16 @@ class ArtifactStore:
                 "The 'azure-storage-blob' package is required for Azure Blob artifact storage."
             ) from exc
         return ResourceExistsError
+
+    @staticmethod
+    def _azure_resource_not_found_error():
+        try:
+            from azure.core.exceptions import ResourceNotFoundError
+        except ImportError as exc:
+            raise RuntimeError(
+                "The 'azure-storage-blob' package is required for Azure Blob artifact storage."
+            ) from exc
+        return ResourceNotFoundError
 
     @staticmethod
     def _parse_azure_blob_uri(storage_uri: str) -> tuple[str, str]:

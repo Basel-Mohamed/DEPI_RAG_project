@@ -66,13 +66,14 @@ class DocumentProcessor:
         """Split page text into chunks, clean whitespace, and drop empty chunks."""
 
         chunks: list[dict[str, Any]] = []
+        settings = getattr(self, "settings", global_settings)
 
         for page in pages:
             page_no = page["page_number"]
 
             for chunk_index, raw_text in enumerate(self.splitter.split_text(page["text"])):
                 cleaned = re.sub(r"\s+", " ", raw_text).strip()
-                if self.settings.ENABLE_PII_REDACTION:
+                if settings.ENABLE_PII_REDACTION:
                     cleaned = redact_pii(cleaned)
                 if not cleaned:
                     continue
