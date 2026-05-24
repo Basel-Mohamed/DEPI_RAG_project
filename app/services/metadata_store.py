@@ -157,13 +157,15 @@ class SqlMetadataStoreBase:
             self._ensure_schema(connection)
             cursor = connection.cursor()
             cursor.execute(f"DELETE FROM {self.file_registry_table}")
-            cursor.executemany(
-                f"""
-                INSERT INTO {self.file_registry_table} (file_id, payload, updated_at)
-                VALUES (?, ?, ?)
-                """,
-                self._registry_params(registry),
-            )
+            registry_params = self._registry_params(registry)
+            if registry_params:
+                cursor.executemany(
+                    f"""
+                    INSERT INTO {self.file_registry_table} (file_id, payload, updated_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    registry_params,
+                )
             connection.commit()
         except Exception:
             connection.rollback()
