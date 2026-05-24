@@ -14,6 +14,147 @@ Example request:
 curl.exe -H "X-API-Key: replace-with-a-secret-value" http://localhost:8000/files
 ```
 
+## Supported Document Upload Schemas
+
+The upload endpoint accepts these file types:
+
+```text
+.pdf, .csv, .json, .txt, .md
+```
+
+Unsupported file extensions are rejected with `415 Unsupported Media Type`. Duplicate uploads are rejected with `409 Conflict` when either the original filename already exists or the uploaded file content matches an existing document by SHA-256 hash.
+
+### PDF
+
+PDF files are extracted page by page with Docling. There is no required schema inside the PDF.
+
+Each extracted page becomes a page record before chunking:
+
+```json
+{
+  "text": "Extracted page text",
+  "page_number": 1,
+  "metadata": {}
+}
+```
+
+### CSV
+
+CSV files may use comma or semicolon delimiters. The loader tries comma first, then falls back to semicolon.
+
+Each CSV row becomes one page before chunking. The loader uses whichever of these text columns are present:
+
+```text
+subject, body, description, text, content, message
+```
+
+All present text columns are concatenated with a space separator. All other columns are preserved as metadata.
+
+Example:
+
+```csv
+subject,body,ticket_id,customer_type
+Login issue,User cannot reset password,TCK-001,premium
+Billing question,Invoice total is incorrect,TCK-002,standard
+```
+
+The first row becomes:
+
+```json
+{
+  "text": "Login issue User cannot reset password",
+  "page_number": 1,
+  "metadata": {
+    "ticket_id": "TCK-001",
+    "customer_type": "premium"
+  }
+}
+```
+
+If none of the expected text columns are present, rows still load, but their text will be empty and no chunks will be produced from those rows.
+
+### JSON
+
+JSON files can contain either a single object or an array of objects.
+
+Default text fields:
+
+```text
+question -> optional title
+answer   -> main text
+```
+
+If `question` is present, it is prepended to `answer` with a newline. All other keys are preserved as metadata.
+
+Example array:
+
+```json
+[
+  {
+    "question": "How do I reset my password?",
+    "answer": "Click forgot password and follow the email link.",
+    "category": "account",
+    "priority": "low"
+  }
+]
+```
+
+The first item becomes:
+
+```json
+{
+  "text": "How do I reset my password?\nClick forgot password and follow the email link.",
+  "page_number": 1,
+  "metadata": {
+    "category": "account",
+    "priority": "low"
+  }
+}
+```
+
+Example single object:
+
+```json
+{
+  "question": "Where can I find invoices?",
+  "answer": "Invoices are available from the billing dashboard.",
+  "category": "billing"
+}
+```
+
+If `answer` is missing, the item still loads, but only `question` contributes text when present.
+
+### TXT and Markdown
+
+`.txt` and `.md` files are read as plain text. The entire file becomes one page before chunking.
+
+Example page record:
+
+```json
+{
+  "text": "Full file contents...",
+  "page_number": 1,
+  "metadata": {}
+}
+```
+
+### Chunk Metadata
+
+After loading, every supported file type is split into chunks. Each chunk contains:
+
+```json
+{
+  "text": "Chunk text after whitespace cleanup and optional PII redaction.",
+  "metadata": {
+    "source": "uploads/file-id.ext",
+    "page_number": 1,
+    "chunk_index": 0
+  }
+}
+```
+
+CSV and JSON metadata fields are merged into the chunk metadata before `source`, `page_number`, and `chunk_index` are added.
+
 ## User Feedback
 
 Use `POST /feedback` to persist answer-level feedback for KPI reporting.
@@ -47,7 +188,7 @@ curl.exe -H "X-API-Key: replace-with-a-secret-value" http://localhost:8000/feedb
 
 ## Azure Blob Artifact Storage
 
-Uploaded PDFs are stored locally by default. To persist uploaded files in Azure Blob Storage, set:
+Uploaded documents are stored locally by default. To persist uploaded files in Azure Blob Storage, set:
 
 ```env
 ARTIFACT_STORAGE_BACKEND=azure_blob

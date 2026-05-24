@@ -104,7 +104,11 @@ def _upload_error(exc: ValueError) -> HTTPException:
     detail = str(exc)
     if "too large" in detail:
         status_code = status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+    elif "Duplicate document" in detail:
+        status_code = status.HTTP_409_CONFLICT
     elif "PDF" in detail:
+        status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+    elif "document formats are supported" in detail:
         status_code = status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
     else:
         status_code = status.HTTP_400_BAD_REQUEST

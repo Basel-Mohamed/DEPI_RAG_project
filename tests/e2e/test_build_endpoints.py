@@ -132,13 +132,43 @@ def client(fake_build_stack, tmp_path, monkeypatch):
     app.dependency_overrides.clear()
 
 
-def test_file_upload_rejects_non_pdf_upload(client):
+def test_file_upload_rejects_unsupported_upload(client):
     response = client.post(
         "/files",
-        files={"file": ("notes.txt", b"not a pdf", "text/plain")},
+        files={"file": ("notes.exe", b"not supported", "application/octet-stream")},
     )
 
     assert response.status_code == 415
+
+
+def test_file_upload_rejects_duplicate_filename(client):
+    first_response = client.post(
+        "/files",
+        files={"file": ("sample.pdf", b"%PDF-1.4 fake pdf bytes", "application/pdf")},
+    )
+    second_response = client.post(
+        "/files",
+        files={"file": ("sample.pdf", b"%PDF-1.4 different fake bytes", "application/pdf")},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 409
+    assert "Duplicate document filename already uploaded" in second_response.json()["detail"]
+
+
+def test_file_upload_rejects_duplicate_content(client):
+    first_response = client.post(
+        "/files",
+        files={"file": ("sample.pdf", b"%PDF-1.4 fake pdf bytes", "application/pdf")},
+    )
+    second_response = client.post(
+        "/files",
+        files={"file": ("renamed.pdf", b"%PDF-1.4 fake pdf bytes", "application/pdf")},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 409
+    assert "Duplicate document content already uploaded" in second_response.json()["detail"]
 
 
 def test_protected_build_endpoint_rejects_missing_api_key(fake_build_stack, tmp_path, monkeypatch):

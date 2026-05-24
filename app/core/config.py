@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
+    ENABLE_PII_REDACTION: bool = True
 
     # ------------------------------------------------------------------
     # Embedding

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import threading
 import uuid
@@ -9,6 +10,7 @@ from fastapi import UploadFile
 
 from app.services.artifacts import artifact_store
 from app.services.metadata_store import get_metadata_store
+from app.services.preprocessing.loaders.loader_factory import SUPPORTED_EXTENSIONS
 from app.services.rag.rag_builder import BuildService
 
 logger = logging.getLogger(__name__)
@@ -28,16 +30,37 @@ class BuildController:
         if not file.filename:
             raise ValueError("A file name is required.")
         suffix = Path(file.filename).suffix.lower()
-        if suffix != ".pdf":
-            raise ValueError("Only PDF documents are supported.")
+        if suffix not in SUPPORTED_EXTENSIONS:
+            supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
+            raise ValueError(f"Only these document formats are supported: {supported}.")
+
+        with self.registry_lock:
+            registry = self._read_registry()
+            duplicate = self._find_duplicate_filename(registry, file.filename)
+            if duplicate is not None:
+                raise ValueError(
+                    f"Duplicate document filename already uploaded: {file.filename} "
+                    f"(file_id={duplicate['file_id']})."
+                )
 
         self.upload_root.mkdir(parents=True, exist_ok=True)
         file_id = str(uuid.uuid4())
         stored_path = self.upload_root / f"{file_id}{suffix}"
 
         logger.info("file upload save started file_id=%s filename=%s", file_id, file.filename)
-        self._save_upload(file, stored_path)
-        self._validate_pdf_file(stored_path)
+        file_sha256 = self._save_upload(file, stored_path)
+        if suffix == ".pdf":
+            self._validate_pdf_file(stored_path)
+        with self.registry_lock:
+            registry = self._read_registry()
+            duplicate = self._find_duplicate_hash(registry, file_sha256)
+            if duplicate is not None:
+                stored_path.unlink(missing_ok=True)
+                raise ValueError(
+                    f"Duplicate document content already uploaded as "
+                    f"{duplicate['filename']} (file_id={duplicate['file_id']})."
+                )
+
         object_name = f"uploads/{file_id}{suffix}"
         storage_uri = self.artifact_store.put_file(stored_path, object_name)
         if self._is_remote_storage_uri(storage_uri):
@@ -48,6 +71,7 @@ class BuildController:
             "file_id": file_id,
             "filename": file.filename,
             "content_type": file.content_type,
+            "sha256": file_sha256,
             "path": str(stored_path),
             "storage_uri": storage_uri,
             "status": "uploaded",
@@ -216,8 +240,9 @@ class BuildController:
         }
 
     @staticmethod
-    def _save_upload(file: UploadFile, path: Path) -> None:
+    def _save_upload(file: UploadFile, path: Path) -> str:
         total_bytes = 0
+        hasher = hashlib.sha256()
         try:
             with path.open("wb") as buffer:
                 while True:
@@ -226,11 +251,53 @@ class BuildController:
                         break
                     total_bytes += len(chunk)
                     if total_bytes > BuildController.max_upload_bytes:
-                        raise ValueError("PDF document is too large.")
+                        raise ValueError("Document is too large.")
+                    hasher.update(chunk)
                     buffer.write(chunk)
         except Exception:
             path.unlink(missing_ok=True)
             raise
+        return hasher.hexdigest()
+
+    @staticmethod
+    def _find_duplicate_filename(
+        registry: dict[str, dict[str, Any]],
+        filename: str,
+    ) -> dict[str, Any] | None:
+        normalized_filename = filename.casefold()
+        for metadata in registry.values():
+            if str(metadata.get("filename", "")).casefold() == normalized_filename:
+                return metadata
+        return None
+
+    @classmethod
+    def _find_duplicate_hash(
+        cls,
+        registry: dict[str, dict[str, Any]],
+        file_sha256: str,
+    ) -> dict[str, Any] | None:
+        for metadata in registry.values():
+            existing_hash = metadata.get("sha256")
+            if existing_hash is None:
+                existing_hash = cls._hash_existing_local_file(metadata)
+            if existing_hash == file_sha256:
+                return metadata
+        return None
+
+    @staticmethod
+    def _hash_existing_local_file(metadata: dict[str, Any]) -> str | None:
+        path = Path(str(metadata.get("path", "")))
+        if not path.exists() or not path.is_file():
+            return None
+
+        hasher = hashlib.sha256()
+        with path.open("rb") as file:
+            while True:
+                chunk = file.read(1024 * 1024)
+                if not chunk:
+                    break
+                hasher.update(chunk)
+        return hasher.hexdigest()
 
     @staticmethod
     def _validate_pdf_file(path: Path) -> None:
