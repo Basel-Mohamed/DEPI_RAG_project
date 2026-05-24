@@ -96,6 +96,12 @@ class FeedbackController:
             "satisfaction_percent": percent,
         }
 
+    def reset_feedback(self) -> dict[str, Any]:
+        with self.feedback_lock:
+            deleted_count = get_metadata_store().clear_feedback(self.feedback_path)
+        logger.info("feedback reset completed deleted_count=%s", deleted_count)
+        return {"reset": True, "deleted_count": deleted_count}
+
     def _read_feedback(self) -> list[dict[str, Any]]:
         return get_metadata_store().read_feedback(self.feedback_path)
 

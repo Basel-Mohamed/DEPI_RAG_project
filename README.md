@@ -249,3 +249,29 @@ Qdrant REST UI/API:
 ```text
 http://localhost:6333/dashboard
 ```
+
+## React Demo Frontend
+
+The demo UI lives in `frontend/` and authenticates against `GET /auth/verify` with the same `X-API-Key` value used by the protected API routes.
+
+Start the backend:
+
+```powershell
+.\venv\Scripts\python.exe -m uvicorn main:app --reload
+```
+
+Start the frontend:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+The frontend defaults to `http://127.0.0.1:8000`. Set `VITE_API_BASE_URL` if the backend is running somewhere else.

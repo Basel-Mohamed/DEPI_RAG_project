@@ -8,6 +8,15 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     LOG_LEVEL: str = "INFO"
     API_KEY: str | None = None
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
+    ]
+    CORS_ORIGIN_REGEX: str = r"http://(localhost|127\.0\.0\.1):517\d"
     
     # ------------------------------------------------------------------
     # Chunking

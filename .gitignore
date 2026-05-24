@@ -1,6 +1,8 @@
 venv/
 python_modules/
 __pycache__/
+node_modules/
+dist/
 
 .env_mine
 logs/

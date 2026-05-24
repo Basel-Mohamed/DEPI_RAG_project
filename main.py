@@ -2,13 +2,15 @@ import logging
 import time
 import uuid
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.build import router as build_router
 from app.api.routes.feedback import router as feedback_router
 from app.api.routes.inference import router as inference_router
 from app.api.routes.monitoring import router as monitoring_router
+from app.core.auth import verify_api_key
 from app.core.config import settings
 from app.core.logging import configure_logging, request_id_context
 from app.controllers.monitoring_controller import MonitoringMetrics
@@ -25,6 +27,14 @@ def should_record_request_metrics(request: Request) -> bool:
 
 
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(build_router)
 app.include_router(inference_router)
 app.include_router(feedback_router)
@@ -70,6 +80,11 @@ async def log_requests(request: Request, call_next):
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/auth/verify", dependencies=[Depends(verify_api_key)])
+def verify_auth() -> dict[str, bool]:
+    return {"authenticated": True}
 
 
 if __name__ == "__main__":

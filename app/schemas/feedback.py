@@ -39,3 +39,8 @@ class FeedbackSatisfactionResponse(BaseModel):
     negative: int
     satisfaction_score: float | None
     satisfaction_percent: float | None
+
+
+class FeedbackResetResponse(BaseModel):
+    reset: bool
+    deleted_count: int = Field(..., ge=0)

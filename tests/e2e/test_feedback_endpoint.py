@@ -166,6 +166,33 @@ def test_feedback_satisfaction_endpoint_handles_empty_feedback(client):
     }
 
 
+def test_feedback_reset_endpoint_clears_saved_feedback(client):
+    for rating in [1, -1]:
+        client.post(
+            "/feedback",
+            json={
+                "session_id": "session-123",
+                "question": "Question?",
+                "answer": "Answer.",
+                "rating": rating,
+                "timestamp": "2026-05-23T15:30:00Z",
+            },
+        )
+
+    reset_response = client.post("/feedback/reset")
+
+    assert reset_response.status_code == 200
+    assert reset_response.json() == {"reset": True, "deleted_count": 2}
+    assert client.get("/feedback").json() == {"feedback": [], "total": 0}
+    assert client.get("/feedback/satisfaction").json() == {
+        "total": 0,
+        "positive": 0,
+        "negative": 0,
+        "satisfaction_score": None,
+        "satisfaction_percent": None,
+    }
+
+
 def test_feedback_endpoint_rejects_missing_api_key(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "API_KEY", "test-api-key")
     monkeypatch.setattr(settings, "METADATA_BACKEND", "json")

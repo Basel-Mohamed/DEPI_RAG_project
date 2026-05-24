@@ -47,6 +47,38 @@ def test_sqlite_metadata_store_appends_feedback(tmp_path):
     assert store.read_feedback(feedback_path) == [second, first]
 
 
+def test_sqlite_metadata_store_clears_feedback(tmp_path):
+    store = SqliteMetadataStore(tmp_path / "metadata.sqlite3")
+    feedback_path = tmp_path / "feedback.json"
+    store.append_feedback(
+        {
+            "feedback_id": "feedback-1",
+            "session_id": "session-1",
+            "question": "Question?",
+            "answer": "Answer.",
+            "rating": 1,
+            "timestamp": "2026-05-23T10:00:00+00:00",
+            "created_at": "2026-05-23T10:00:01+00:00",
+        },
+        feedback_path,
+    )
+    store.append_feedback(
+        {
+            "feedback_id": "feedback-2",
+            "session_id": "session-2",
+            "question": "Another question?",
+            "answer": "Another answer.",
+            "rating": -1,
+            "timestamp": "2026-05-23T11:00:00+00:00",
+            "created_at": "2026-05-23T11:00:01+00:00",
+        },
+        feedback_path,
+    )
+
+    assert store.clear_feedback(feedback_path) == 2
+    assert store.read_feedback(feedback_path) == []
+
+
 def test_sqlite_metadata_store_persists_and_clears_monitoring_metrics(tmp_path):
     store = SqliteMetadataStore(tmp_path / "metadata.sqlite3")
     metrics_path = tmp_path / "metrics.json"

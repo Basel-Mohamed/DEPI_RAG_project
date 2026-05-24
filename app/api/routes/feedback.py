@@ -7,6 +7,7 @@ from app.core.auth import verify_api_key
 from app.schemas.feedback import (
     FeedbackListResponse,
     FeedbackRequest,
+    FeedbackResetResponse,
     FeedbackResponse,
     FeedbackSatisfactionResponse,
 )
@@ -74,4 +75,19 @@ def get_satisfaction(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Feedback satisfaction lookup failed. Check server logs for the request id.",
+        )
+
+
+@router.post("/feedback/reset", response_model=FeedbackResetResponse)
+def reset_feedback(
+    controller: FeedbackController = Depends(get_feedback_controller),
+) -> dict:
+    logger.info("feedback reset endpoint received")
+    try:
+        return controller.reset_feedback()
+    except Exception:
+        logger.exception("feedback reset endpoint failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Feedback reset failed. Check server logs for the request id.",
         )

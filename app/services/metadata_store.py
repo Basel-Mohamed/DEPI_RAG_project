@@ -26,6 +26,9 @@ class MetadataStore(Protocol):
     def append_feedback(self, record: dict[str, Any], feedback_path: Path) -> None:
         ...
 
+    def clear_feedback(self, feedback_path: Path) -> int:
+        ...
+
     def read_monitoring_metrics(self, metrics_path: Path) -> list[dict[str, Any]]:
         ...
 
@@ -76,6 +79,11 @@ class JsonMetadataStore:
         feedback = self.read_feedback(feedback_path)
         feedback.append(record)
         self._write_json(feedback_path, feedback)
+
+    def clear_feedback(self, feedback_path: Path) -> int:
+        deleted_count = len(self.read_feedback(feedback_path))
+        self._write_json(feedback_path, [])
+        return deleted_count
 
     def read_monitoring_metrics(self, metrics_path: Path) -> list[dict[str, Any]]:
         if not metrics_path.exists():
@@ -192,6 +200,22 @@ class SqlMetadataStoreBase:
                 self._feedback_params(record),
             )
             connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def clear_feedback(self, feedback_path: Path) -> int:
+        connection = self._connect()
+        try:
+            self._ensure_schema(connection)
+            cursor = connection.cursor()
+            row = cursor.execute(f"SELECT COUNT(*) FROM {self.feedback_table}").fetchone()
+            deleted_count = int(row[0] or 0)
+            cursor.execute(f"DELETE FROM {self.feedback_table}")
+            connection.commit()
+            return deleted_count
         except Exception:
             connection.rollback()
             raise
@@ -329,11 +353,11 @@ class SqliteMetadataStore(SqlMetadataStoreBase):
     monitoring_metrics_table = "monitoring_metrics"
 
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self.db_path = Path(db_path or settings.METADATA_DB_PATH)
+        self.db_path = Path(db_path or settings.METADATA_DB_PATH).resolve()
 
     def _connect(self) -> sqlite3.Connection:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(self.db_path)
+        return sqlite3.connect(self.db_path, timeout=30)
 
     @staticmethod
     def _ensure_schema(connection: sqlite3.Connection) -> None:
