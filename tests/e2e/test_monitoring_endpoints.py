@@ -176,3 +176,26 @@ def test_monitoring_endpoints_require_api_key(tmp_path, monkeypatch):
         app.dependency_overrides.clear()
 
     assert response.status_code == 401
+
+
+def test_monitoring_endpoints_accept_bearer_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "API_KEY", "test-api-key")
+    monkeypatch.setattr(settings, "METADATA_BACKEND", "json")
+    monkeypatch.setattr(MonitoringMetrics, "metrics_path", tmp_path / "metrics.json")
+    monkeypatch.setattr(FeedbackController, "feedback_root", tmp_path / "feedback")
+    monkeypatch.setattr(
+        FeedbackController,
+        "feedback_path",
+        tmp_path / "feedback" / "feedback.json",
+    )
+    app.dependency_overrides[get_monitoring_controller] = lambda: MonitoringController(
+        FakeQdrantService()
+    )
+    try:
+        with TestClient(app, headers={"Authorization": "Bearer test-api-key"}) as test_client:
+            response = test_client.get("/metrics/prometheus")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "rag_request_total" in response.text

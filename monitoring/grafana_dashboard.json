@@ -1,0 +1,275 @@
+{
+  "dashboard": {
+    "uid": "rag-monitoring",
+    "title": "RAG System Monitoring",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Total Requests",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rag_request_total",
+            "legendFormat": "rag_request_total",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        }
+      },
+      {
+        "id": 2,
+        "type": "gauge",
+        "title": "Avg Request Latency (ms)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 0,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rag_request_latency_ms_avg",
+            "legendFormat": "rag_request_latency_ms_avg",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1000
+                },
+                {
+                  "color": "red",
+                  "value": 3000
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        }
+      },
+      {
+        "id": 3,
+        "type": "gauge",
+        "title": "Avg LLM Latency (ms)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rag_llm_latency_ms_avg",
+            "legendFormat": "rag_llm_latency_ms_avg",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 2000
+                },
+                {
+                  "color": "red",
+                  "value": 5000
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        }
+      },
+      {
+        "id": 4,
+        "type": "gauge",
+        "title": "User Satisfaction Score",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 8,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rag_satisfaction_score",
+            "legendFormat": "rag_satisfaction_score",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.5
+                },
+                {
+                  "color": "green",
+                  "value": 0.75
+                }
+              ]
+            },
+            "min": 0,
+            "max": 1
+          },
+          "overrides": []
+        },
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        }
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "Total LLM Tokens",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 16,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rag_llm_tokens_total",
+            "legendFormat": "rag_llm_tokens_total",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        }
+      },
+      {
+        "id": 6,
+        "type": "stat",
+        "title": "Feedback Count",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 16,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "expr": "rag_feedback_total",
+            "legendFormat": "rag_feedback_total",
+            "refId": "A"
+          },
+          {
+            "expr": "rag_feedback_positive_total",
+            "legendFormat": "rag_feedback_positive_total",
+            "refId": "B"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}
