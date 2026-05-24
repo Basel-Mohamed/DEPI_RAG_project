@@ -11,3 +11,4 @@ uploads/
 .qdrant/
 .pytest_cache/
 .env
+frontend
