@@ -15,6 +15,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5174",
         "http://localhost:5175",
         "http://127.0.0.1:5175",
+        "https://depi-rag-frontend.vercel.app",
     ]
     CORS_ORIGIN_REGEX: str = r"http://(localhost|127\.0\.0\.1):517\d"
     
